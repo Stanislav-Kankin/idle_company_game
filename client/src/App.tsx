@@ -30,29 +30,32 @@ export default function App() {
           fontFamily: "system-ui",
           fontSize: 14,
           zIndex: 10,
-          minWidth: 220,
+          minWidth: 260,
         }}
       >
         <div style={{ fontWeight: 700 }}>City Builder</div>
         <div>API health: {status}</div>
-        <div style={{ opacity: 0.85, marginTop: 6 }}>
+
+        <div style={{ opacity: 0.88, marginTop: 6 }}>
           Tool: <b>{tool}</b>
-          {hover ? (
-            <span style={{ marginLeft: 8, opacity: 0.85 }}>Tile {hover.x},{hover.y}</span>
-          ) : null}
+          {hover ? <span style={{ marginLeft: 8, opacity: 0.85 }}>Tile {hover.x},{hover.y}</span> : null}
         </div>
 
-        <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+        <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
           <button onClick={() => setTool("road")} style={btnStyle(tool === "road")}>
             Road
           </button>
           <button onClick={() => setTool("house")} style={btnStyle(tool === "house")}>
             House
           </button>
+          <button onClick={() => setTool("well")} style={btnStyle(tool === "well")}>
+            Well
+          </button>
         </div>
 
-        <div style={{ opacity: 0.75, marginTop: 8 }}>
-          Tap to place • Drag to move • Wheel to zoom
+        <div style={{ opacity: 0.78, marginTop: 8 }}>Tap to place • Drag to move • Wheel to zoom</div>
+        <div style={{ opacity: 0.78, marginTop: 4 }}>
+          Tip: place <b>Well</b> next to a road to spawn a water carrier.
         </div>
       </div>
     </div>

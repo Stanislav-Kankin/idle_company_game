@@ -1,96 +1,88 @@
 import type { Camera } from "./camera";
-import type { Grid, CellType } from "../types";
+import { clamp } from "./camera";
 
-export type WorldConfig = {
-  tile: number;
-  cols: number;
-  rows: number;
+type DragState = {
+  active: boolean;
+  startX: number;
+  startY: number;
+  camX: number;
+  camY: number;
+  moved: boolean;
 };
 
-function cellColor(t: CellType) {
-  if (t === "road") return "rgba(148, 163, 184, 0.9)";
-  if (t === "house") return "rgba(59, 130, 246, 0.9)";
-  return null;
-}
-
-export function render(
-  ctx: CanvasRenderingContext2D,
-  w: number,
-  h: number,
-  cam: Camera,
-  world: WorldConfig,
-  grid: Grid,
-  hover: { x: number; y: number } | null
+export function attachInput(
+  canvas: HTMLCanvasElement,
+  getCam: () => Camera,
+  setCam: (c: Camera) => void,
+  onHoverTile: (tile: { x: number; y: number } | null) => void,
+  onTapTile: (tile: { x: number; y: number }) => void,
+  tileSize: number
 ) {
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.clearRect(0, 0, w, h);
+  const drag: DragState = { active: false, startX: 0, startY: 0, camX: 0, camY: 0, moved: false };
 
-  ctx.fillStyle = "#0b1220";
-  ctx.fillRect(0, 0, w, h);
+  const toTile = (clientX: number, clientY: number) => {
+    const rect = canvas.getBoundingClientRect();
+    const sx = clientX - rect.left;
+    const sy = clientY - rect.top;
+    const cam = getCam();
+    const wx = cam.x + sx / cam.zoom;
+    const wy = cam.y + sy / cam.zoom;
+    return { x: Math.floor(wx / tileSize), y: Math.floor(wy / tileSize) };
+  };
 
-  ctx.setTransform(cam.zoom, 0, 0, cam.zoom, -cam.x * cam.zoom, -cam.y * cam.zoom);
+  const onPointerDown = (e: PointerEvent) => {
+    canvas.setPointerCapture(e.pointerId);
+    drag.active = true;
+    drag.moved = false;
+    drag.startX = e.clientX;
+    drag.startY = e.clientY;
+    const cam = getCam();
+    drag.camX = cam.x;
+    drag.camY = cam.y;
+  };
 
-  const worldW = world.cols * world.tile;
-  const worldH = world.rows * world.tile;
+  const onPointerMove = (e: PointerEvent) => {
+    onHoverTile(toTile(e.clientX, e.clientY));
 
-  ctx.fillStyle = "#0f1b30";
-  ctx.fillRect(0, 0, worldW, worldH);
+    if (!drag.active) return;
 
-  const viewX0 = cam.x;
-  const viewY0 = cam.y;
-  const viewX1 = cam.x + w / cam.zoom;
-  const viewY1 = cam.y + h / cam.zoom;
+    const cam = getCam();
+    const dx = e.clientX - drag.startX;
+    const dy = e.clientY - drag.startY;
 
-  const xStart = Math.max(0, Math.floor(viewX0 / world.tile));
-  const yStart = Math.max(0, Math.floor(viewY0 / world.tile));
-  const xEnd = Math.min(world.cols, Math.ceil(viewX1 / world.tile));
-  const yEnd = Math.min(world.rows, Math.ceil(viewY1 / world.tile));
+    if (Math.abs(dx) + Math.abs(dy) > 6) drag.moved = true;
 
-  // draw placed objects
-  for (let y = yStart; y < yEnd; y++) {
-    for (let x = xStart; x < xEnd; x++) {
-      const v = grid.cells[y * grid.cols + x];
-      if (v === 0) continue;
+    setCam({ ...cam, x: drag.camX - dx / cam.zoom, y: drag.camY - dy / cam.zoom });
+  };
 
-      const t: CellType = v === 1 ? "road" : "house";
-      const c = cellColor(t);
-      if (!c) continue;
+  const onPointerUp = (e: PointerEvent) => {
+    const tile = toTile(e.clientX, e.clientY);
+    const wasTap = drag.active && !drag.moved;
+    drag.active = false;
 
-      ctx.fillStyle = c;
-      // slight padding for aesthetics
-      ctx.fillRect(x * world.tile + 2, y * world.tile + 2, world.tile - 4, world.tile - 4);
-    }
-  }
+    try {
+      canvas.releasePointerCapture(e.pointerId);
+    } catch {}
 
-  // grid lines on top
-  ctx.strokeStyle = "rgba(148, 163, 184, 0.18)";
-  ctx.lineWidth = 1;
+    if (wasTap) onTapTile(tile);
+  };
 
-  for (let x = xStart; x <= xEnd; x++) {
-    ctx.beginPath();
-    ctx.moveTo(x * world.tile, yStart * world.tile);
-    ctx.lineTo(x * world.tile, yEnd * world.tile);
-    ctx.stroke();
-  }
-  for (let y = yStart; y <= yEnd; y++) {
-    ctx.beginPath();
-    ctx.moveTo(xStart * world.tile, y * world.tile);
-    ctx.lineTo(xEnd * world.tile, y * world.tile);
-    ctx.stroke();
-  }
+  const onWheel = (e: WheelEvent) => {
+    e.preventDefault();
+    const cam = getCam();
+    const zoom = clamp(cam.zoom - e.deltaY * 0.001, 0.6, 2.2);
+    setCam({ ...cam, zoom });
+  };
 
-  // hover highlight
-  if (hover && hover.x >= 0 && hover.y >= 0 && hover.x < world.cols && hover.y < world.rows) {
-    ctx.fillStyle = "rgba(250, 204, 21, 0.18)";
-    ctx.fillRect(hover.x * world.tile, hover.y * world.tile, world.tile, world.tile);
+  canvas.addEventListener("pointerdown", onPointerDown, { passive: true });
+  window.addEventListener("pointermove", onPointerMove, { passive: true });
+  window.addEventListener("pointerup", onPointerUp, { passive: true });
+  canvas.addEventListener("wheel", onWheel, { passive: false });
 
-    ctx.strokeStyle = "rgba(250, 204, 21, 0.55)";
-    ctx.strokeRect(hover.x * world.tile + 0.5, hover.y * world.tile + 0.5, world.tile - 1, world.tile - 1);
-  }
-
-  // center marker
-  const cx = Math.floor(world.cols / 2) * world.tile;
-  const cy = Math.floor(world.rows / 2) * world.tile;
-  ctx.fillStyle = "rgba(34, 197, 94, 0.9)";
-  ctx.fillRect(cx, cy, world.tile, world.tile);
+  return () => {
+    canvas.removeEventListener("pointerdown", onPointerDown);
+    window.removeEventListener("pointermove", onPointerMove);
+    window.removeEventListener("pointerup", onPointerUp);
+    canvas.removeEventListener("wheel", onWheel);
+  };
 }

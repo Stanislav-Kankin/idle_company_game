@@ -4,6 +4,7 @@ import { render, type WorldConfig } from "./render";
 import { attachInput } from "./input";
 import type { Camera } from "./camera";
 import { type Grid, type Tool, setCell } from "../types";
+import { ensureWalkersForWells, stepWalkers, type Walker } from "../sim/sim";
 
 export function GameCanvas(props: {
   tool: Tool;
@@ -20,13 +21,24 @@ export function GameCanvas(props: {
     cells: new Uint8Array(world.cols * world.rows),
   });
 
+  const waterExpiryRef = useRef<Float64Array>(new Float64Array(world.cols * world.rows));
+  const walkersRef = useRef<Walker[]>([]);
   const hoverRef = useRef<{ x: number; y: number } | null>(null);
-
   const camRef = useRef<Camera>({ x: 0, y: 0, zoom: 1 });
+
+  const toolRef = useRef<Tool>(props.tool);
+  const onHoverRef = useRef<typeof props.onHover>(props.onHover);
 
   const [version, setVersion] = useState(0);
 
-  // init camera once
+  useEffect(() => {
+    toolRef.current = props.tool;
+  }, [props.tool]);
+
+  useEffect(() => {
+    onHoverRef.current = props.onHover;
+  }, [props.onHover]);
+
   useEffect(() => {
     camRef.current = {
       x: (world.cols * world.tile) / 2 - w / 2,
@@ -37,7 +49,6 @@ export function GameCanvas(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // attach input once
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -50,16 +61,18 @@ export function GameCanvas(props: {
       },
       (tile) => {
         hoverRef.current = tile;
-        props.onHover?.(tile);
+        onHoverRef.current?.(tile);
       },
-      (tile) => {
-        // Build mode: place depending on selected tool
-        const t = props.tool;
+      (tile: { x: number; y: number }) => {
+        const t = toolRef.current;
         if (t === "road") {
           setCell(gridRef.current, tile.x, tile.y, "road");
           setVersion((v) => v + 1);
         } else if (t === "house") {
           setCell(gridRef.current, tile.x, tile.y, "house");
+          setVersion((v) => v + 1);
+        } else if (t === "well") {
+          setCell(gridRef.current, tile.x, tile.y, "well");
           setVersion((v) => v + 1);
         }
       },
@@ -67,9 +80,8 @@ export function GameCanvas(props: {
     );
 
     return cleanup;
-  }, [props.tool, props.onHover, world.tile]);
+  }, [world.tile]);
 
-  // render loop
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -85,19 +97,38 @@ export function GameCanvas(props: {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     let raf = 0;
+
     const loop = () => {
-      render(ctx, w, h, camRef.current, world, gridRef.current, hoverRef.current);
+      const now = performance.now();
+
+      walkersRef.current = ensureWalkersForWells(gridRef.current, walkersRef.current, now);
+
+      walkersRef.current = stepWalkers(gridRef.current, walkersRef.current, now, waterExpiryRef.current, {
+        moveEveryMs: 450,
+        waterDurationMs: 12_000,
+      });
+
+      render(
+        ctx,
+        w,
+        h,
+        camRef.current,
+        world,
+        gridRef.current,
+        hoverRef.current,
+        waterExpiryRef.current,
+        now,
+        walkersRef.current
+      );
+
       raf = requestAnimationFrame(loop);
     };
-    raf = requestAnimationFrame(loop);
 
+    raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
   }, [w, h, world, version]);
 
   return (
-    <canvas
-      ref={canvasRef}
-      style={{ display: "block", width: "100vw", height: "100vh", touchAction: "none" }}
-    />
+    <canvas ref={canvasRef} style={{ display: "block", width: "100vw", height: "100vh", touchAction: "none" }} />
   );
 }
