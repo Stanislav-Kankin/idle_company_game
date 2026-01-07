@@ -57,7 +57,14 @@ function drawRoad(ctx: CanvasRenderingContext2D, x: number, y: number, tile: num
   ctx.strokeRect(px + half + 1, py + half + 1, thickness - 2, thickness - 2);
 }
 
-function drawHouse(ctx: CanvasRenderingContext2D, x: number, y: number, tile: number, waterActive: boolean) {
+function drawHouse(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  tile: number,
+  hasWaterPotential: boolean,
+  recentlyServed: boolean
+) {
   const px = x * tile;
   const py = y * tile;
 
@@ -80,11 +87,15 @@ function drawHouse(ctx: CanvasRenderingContext2D, x: number, y: number, tile: nu
   ctx.fillRect(px + 7, py + tile - 12, ww, ww);
   ctx.fillRect(px + tile - 7 - ww, py + tile - 12, ww, ww);
 
-  if (waterActive) {
-    ctx.fillStyle = "rgba(34, 211, 238, 0.18)";
+  // Base: water potential (radius from wells)
+  if (hasWaterPotential) {
+    ctx.fillStyle = "rgba(59, 130, 246, 0.18)";
     ctx.fillRect(px + 3, py + 7, tile - 6, tile - 10);
+  }
 
-    ctx.strokeStyle = "rgba(34, 211, 238, 0.65)";
+  // Highlight: recently served by a walker (kept for Caesar-like "service" vibe)
+  if (recentlyServed) {
+    ctx.strokeStyle = "rgba(34, 211, 238, 0.7)";
     ctx.lineWidth = 2;
     ctx.strokeRect(px + 3.5, py + 7.5, tile - 7, tile - 11);
   } else {
@@ -144,6 +155,7 @@ export function render(
   world: WorldConfig,
   grid: Grid,
   hover: { x: number; y: number } | null,
+  waterPotential: Uint8Array,
   waterExpiry: Float64Array,
   now: number,
   walkers: Walker[]
@@ -184,7 +196,7 @@ export function render(
         drawWell(ctx, x, y, world.tile);
       } else if (isHouse(grid, x, y)) {
         const i = y * grid.cols + x;
-        drawHouse(ctx, x, y, world.tile, waterExpiry[i] > now);
+        drawHouse(ctx, x, y, world.tile, waterPotential[i] === 1, waterExpiry[i] > now);
       }
     }
   }

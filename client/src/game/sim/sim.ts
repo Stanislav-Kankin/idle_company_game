@@ -12,6 +12,35 @@ export type Walker = {
   homeWellY: number;
 };
 
+/**
+ * Deterministic "water potential" from wells (radius-based).
+ *
+ * IMPORTANT: this is intentionally separated from walker service highlights (waterExpiry).
+ * Later, house upgrade rules will use this potential, while walkers remain a visual/"service"
+ * mechanic.
+ *
+ * Metric: Manhattan distance (diamond): |dx| + |dy| <= radius
+ */
+export function computeWellWaterPotential(grid: Grid, radius: number): Uint8Array {
+  const out = new Uint8Array(grid.cols * grid.rows);
+  if (radius <= 0) return out;
+
+  const wells = listWells(grid);
+  for (const well of wells) {
+    for (let dy = -radius; dy <= radius; dy++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        if (Math.abs(dx) + Math.abs(dy) > radius) continue;
+        const x = well.x + dx;
+        const y = well.y + dy;
+        if (x < 0 || y < 0 || x >= grid.cols || y >= grid.rows) continue;
+        out[y * grid.cols + x] = 1;
+      }
+    }
+  }
+
+  return out;
+}
+
 const DIRS = [
   { dx: 0, dy: -1 }, // N
   { dx: 1, dy: 0 }, // E
