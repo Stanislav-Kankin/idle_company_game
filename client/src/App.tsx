@@ -1,8 +1,12 @@
 import { useEffect, useState } from "react";
 import { fetchHealth } from "./api/health";
+import { GameCanvas } from "./game/canvas/GameCanvas";
+import type { Tool } from "./game/types";
 
 export default function App() {
-  const [status, setStatus] = useState<string>("...");
+  const [status, setStatus] = useState("...");
+  const [tool, setTool] = useState<Tool>("road");
+  const [hover, setHover] = useState<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     fetchHealth()
@@ -11,9 +15,58 @@ export default function App() {
   }, []);
 
   return (
-    <div style={{ padding: 24, fontFamily: "system-ui" }}>
-      <h1>City Builder</h1>
-      <p>API health: {status}</p>
+    <div>
+      <GameCanvas tool={tool} onHover={setHover} />
+
+      <div
+        style={{
+          position: "fixed",
+          left: 16,
+          top: 16,
+          background: "rgba(0,0,0,0.55)",
+          color: "white",
+          padding: "10px 12px",
+          borderRadius: 10,
+          fontFamily: "system-ui",
+          fontSize: 14,
+          zIndex: 10,
+          minWidth: 220,
+        }}
+      >
+        <div style={{ fontWeight: 700 }}>City Builder</div>
+        <div>API health: {status}</div>
+        <div style={{ opacity: 0.85, marginTop: 6 }}>
+          Tool: <b>{tool}</b>
+          {hover ? (
+            <span style={{ marginLeft: 8, opacity: 0.85 }}>Tile {hover.x},{hover.y}</span>
+          ) : null}
+        </div>
+
+        <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+          <button onClick={() => setTool("road")} style={btnStyle(tool === "road")}>
+            Road
+          </button>
+          <button onClick={() => setTool("house")} style={btnStyle(tool === "house")}>
+            House
+          </button>
+        </div>
+
+        <div style={{ opacity: 0.75, marginTop: 8 }}>
+          Tap to place • Drag to move • Wheel to zoom
+        </div>
+      </div>
     </div>
   );
+}
+
+function btnStyle(active: boolean): React.CSSProperties {
+  return {
+    cursor: "pointer",
+    borderRadius: 10,
+    padding: "8px 10px",
+    border: "1px solid rgba(255,255,255,0.2)",
+    background: active ? "rgba(59, 130, 246, 0.9)" : "rgba(255,255,255,0.08)",
+    color: "white",
+    fontWeight: 600,
+  };
 }
