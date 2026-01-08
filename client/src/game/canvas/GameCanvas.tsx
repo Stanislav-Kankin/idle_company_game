@@ -4,7 +4,12 @@ import { render, type WorldConfig } from "./render";
 import { attachInput } from "./input";
 import type { Camera } from "./camera";
 import { type Grid, type Tool, setCell } from "../types";
-import { ensureWalkersForWells, stepWalkers, type Walker } from "../sim/sim";
+import {
+  computeWellWaterPotential,
+  ensureWaterCarriersForHouses,
+  stepWalkers,
+  type Walker,
+} from "../sim/sim";
 
 export function GameCanvas(props: {
   tool: Tool;
@@ -21,7 +26,12 @@ export function GameCanvas(props: {
     cells: new Uint8Array(world.cols * world.rows),
   });
 
+  // Service highlight (walker-based, time-limited)
   const waterExpiryRef = useRef<Float64Array>(new Float64Array(world.cols * world.rows));
+
+  // Base availability (well radius-based, deterministic)
+  const waterPotentialRef = useRef<Uint8Array>(new Uint8Array(world.cols * world.rows));
+
   const walkersRef = useRef<Walker[]>([]);
   const hoverRef = useRef<{ x: number; y: number } | null>(null);
   const camRef = useRef<Camera>({ x: 0, y: 0, zoom: 1 });
@@ -45,6 +55,10 @@ export function GameCanvas(props: {
       y: (world.rows * world.tile) / 2 - h / 2,
       zoom: 1,
     };
+
+    // initial well -> water potential layer (radius=3, Manhattan)
+    waterPotentialRef.current = computeWellWaterPotential(gridRef.current, 3);
+
     setVersion((v) => v + 1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -65,16 +79,20 @@ export function GameCanvas(props: {
       },
       (tile: { x: number; y: number }) => {
         const t = toolRef.current;
+
         if (t === "road") {
           setCell(gridRef.current, tile.x, tile.y, "road");
-          setVersion((v) => v + 1);
         } else if (t === "house") {
           setCell(gridRef.current, tile.x, tile.y, "house");
-          setVersion((v) => v + 1);
         } else if (t === "well") {
           setCell(gridRef.current, tile.x, tile.y, "well");
-          setVersion((v) => v + 1);
         }
+
+        // MVP: cheap deterministic recompute after any build action.
+        // Later we can optimize to event-based incremental updates.
+        waterPotentialRef.current = computeWellWaterPotential(gridRef.current, 3);
+
+        setVersion((v) => v + 1);
       },
       world.tile
     );
@@ -101,13 +119,17 @@ export function GameCanvas(props: {
     const loop = () => {
       const now = performance.now();
 
-      walkersRef.current = ensureWalkersForWells(gridRef.current, walkersRef.current, now);
+      // Walkers are attached to ELIGIBLE houses (road + water potential)
+      walkersRef.current = ensureWaterCarriersForHouses(
+        gridRef.current,
+        waterPotentialRef.current,
+        walkersRef.current,
+        now
+      );
 
-      walkersRef.current = stepWalkers(gridRef.current, walkersRef.current, now, waterExpiryRef.current, {
-        moveEveryMs: 450,
-        waterDurationMs: 12_000,
-      });
+      walkersRef.current = stepWalkers(gridRef.current, walkersRef.current, now, waterExpiryRef.current);
 
+      // IMPORTANT: render.ts expects waterPotential BEFORE waterExpiry.
       render(
         ctx,
         w,
@@ -116,6 +138,7 @@ export function GameCanvas(props: {
         world,
         gridRef.current,
         hoverRef.current,
+        waterPotentialRef.current,
         waterExpiryRef.current,
         now,
         walkersRef.current

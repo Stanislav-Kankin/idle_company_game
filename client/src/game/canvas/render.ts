@@ -87,15 +87,15 @@ function drawHouse(
   ctx.fillRect(px + 7, py + tile - 12, ww, ww);
   ctx.fillRect(px + tile - 7 - ww, py + tile - 12, ww, ww);
 
-  // Base: water potential (radius from wells)
+  // Base: water potential from wells radius layer
   if (hasWaterPotential) {
     ctx.fillStyle = "rgba(59, 130, 246, 0.18)";
     ctx.fillRect(px + 3, py + 7, tile - 6, tile - 10);
   }
 
-  // Highlight: recently served by a walker (kept for Caesar-like "service" vibe)
+  // Highlight: recently served by a walker (time-limited)
   if (recentlyServed) {
-    ctx.strokeStyle = "rgba(34, 211, 238, 0.7)";
+    ctx.strokeStyle = "rgba(34, 211, 238, 0.65)";
     ctx.lineWidth = 2;
     ctx.strokeRect(px + 3.5, py + 7.5, tile - 7, tile - 11);
   } else {

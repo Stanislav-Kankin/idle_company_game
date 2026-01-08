@@ -8,38 +8,13 @@ export type Walker = {
   prevY: number;
   step: number;
   nextMoveAt: number; // ms in performance.now() timebase
-  homeWellX: number;
-  homeWellY: number;
+
+  // Backward-compat / different attach modes (we keep both fields to avoid breaking imports/usages)
+  homeWellX?: number;
+  homeWellY?: number;
+  homeHouseX?: number;
+  homeHouseY?: number;
 };
-
-/**
- * Deterministic "water potential" from wells (radius-based).
- *
- * IMPORTANT: this is intentionally separated from walker service highlights (waterExpiry).
- * Later, house upgrade rules will use this potential, while walkers remain a visual/"service"
- * mechanic.
- *
- * Metric: Manhattan distance (diamond): |dx| + |dy| <= radius
- */
-export function computeWellWaterPotential(grid: Grid, radius: number): Uint8Array {
-  const out = new Uint8Array(grid.cols * grid.rows);
-  if (radius <= 0) return out;
-
-  const wells = listWells(grid);
-  for (const well of wells) {
-    for (let dy = -radius; dy <= radius; dy++) {
-      for (let dx = -radius; dx <= radius; dx++) {
-        if (Math.abs(dx) + Math.abs(dy) > radius) continue;
-        const x = well.x + dx;
-        const y = well.y + dy;
-        if (x < 0 || y < 0 || x >= grid.cols || y >= grid.rows) continue;
-        out[y * grid.cols + x] = 1;
-      }
-    }
-  }
-
-  return out;
-}
 
 const DIRS = [
   { dx: 0, dy: -1 }, // N
@@ -79,7 +54,40 @@ export function listWells(grid: Grid): Array<{ x: number; y: number }> {
   return wells;
 }
 
-export function findSpawnRoadNearWell(
+export function listHouses(grid: Grid): Array<{ x: number; y: number }> {
+  const houses: Array<{ x: number; y: number }> = [];
+  for (let y = 0; y < grid.rows; y++) {
+    for (let x = 0; x < grid.cols; x++) {
+      if (isHouse(grid, x, y)) houses.push({ x, y });
+    }
+  }
+  return houses;
+}
+
+/**
+ * Deterministic "water potential" from wells (radius-based).
+ * Metric: Manhattan distance (diamond): |dx| + |dy| <= radius.
+ */
+export function computeWellWaterPotential(grid: Grid, radius: number): Uint8Array {
+  const out = new Uint8Array(grid.cols * grid.rows);
+  if (radius <= 0) return out;
+
+  const wells = listWells(grid);
+  for (const well of wells) {
+    for (let dy = -radius; dy <= radius; dy++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        if (Math.abs(dx) + Math.abs(dy) > radius) continue;
+        const x = well.x + dx;
+        const y = well.y + dy;
+        if (!inBounds(grid, x, y)) continue;
+        out[y * grid.cols + x] = 1;
+      }
+    }
+  }
+  return out;
+}
+
+function findSpawnRoadNearWell(
   grid: Grid,
   wellX: number,
   wellY: number
@@ -90,6 +98,26 @@ export function findSpawnRoadNearWell(
     if (isRoad(grid, nx, ny)) return { x: nx, y: ny };
   }
   return null;
+}
+
+function findSpawnRoadNearHouse(
+  grid: Grid,
+  houseX: number,
+  houseY: number
+): { x: number; y: number } | null {
+  for (const d of DIRS) {
+    const nx = houseX + d.dx;
+    const ny = houseY + d.dy;
+    if (isRoad(grid, nx, ny)) return { x: nx, y: ny };
+  }
+  return null;
+}
+
+function hasAdjacentRoad(grid: Grid, x: number, y: number) {
+  for (const d of DIRS) {
+    if (isRoad(grid, x + d.dx, y + d.dy)) return true;
+  }
+  return false;
 }
 
 export function applyWaterFromRoadTile(
@@ -166,11 +194,15 @@ export function stepWalkers(
   return walkers;
 }
 
+/**
+ * Legacy (kept to avoid breaking older code): one walker per WELL.
+ * NOTE: Current design direction is "walkers are attached to houses"; use ensureWaterCarriersForHouses.
+ */
 export function ensureWalkersForWells(grid: Grid, walkers: Walker[], now: number): Walker[] {
   const wells = listWells(grid);
   let nextId = walkers.reduce((m, w) => Math.max(m, w.id), 0) + 1;
 
-  // One walker per well (MVP)
+  // One walker per well (legacy)
   for (const well of wells) {
     const exists = walkers.some((w) => w.homeWellX === well.x && w.homeWellY === well.y);
     if (exists) continue;
@@ -193,5 +225,66 @@ export function ensureWalkersForWells(grid: Grid, walkers: Walker[], now: number
 
   // Remove walkers whose well was deleted
   const wellKey = new Set(wells.map((w) => `${w.x},${w.y}`));
-  return walkers.filter((w) => wellKey.has(`${w.homeWellX},${w.homeWellY}`));
+  return walkers.filter(
+    (w) =>
+      w.homeWellX !== undefined &&
+      w.homeWellY !== undefined &&
+      wellKey.has(`${w.homeWellX},${w.homeWellY}`)
+  );
+}
+
+/**
+ * Caesar-like: walkers exist for HOUSES, not wells.
+ * A house is eligible if:
+ *  - it is a house tile
+ *  - it has an adjacent road tile (4-neighborhood)
+ *  - it has water potential (from wells radius layer)
+ *
+ * One water-carrier per eligible house (MVP).
+ */
+export function ensureWaterCarriersForHouses(
+  grid: Grid,
+  waterPotential: Uint8Array,
+  walkers: Walker[],
+  now: number
+): Walker[] {
+  const houses = listHouses(grid);
+  let nextId = walkers.reduce((m, w) => Math.max(m, w.id), 0) + 1;
+
+  const eligibleKey = new Set<string>();
+
+  for (const house of houses) {
+    const i = house.y * grid.cols + house.x;
+    const eligible = waterPotential[i] === 1 && hasAdjacentRoad(grid, house.x, house.y);
+    if (!eligible) continue;
+
+    const key = `${house.x},${house.y}`;
+    eligibleKey.add(key);
+
+    const exists = walkers.some((w) => w.homeHouseX === house.x && w.homeHouseY === house.y);
+    if (exists) continue;
+
+    const spawn = findSpawnRoadNearHouse(grid, house.x, house.y);
+    if (!spawn) continue;
+
+    walkers.push({
+      id: nextId++,
+      x: spawn.x,
+      y: spawn.y,
+      prevX: spawn.x,
+      prevY: spawn.y,
+      step: 0,
+      nextMoveAt: now + 250,
+      homeHouseX: house.x,
+      homeHouseY: house.y,
+    });
+  }
+
+  // Remove walkers if the house is gone or no longer eligible
+  return walkers.filter(
+    (w) =>
+      w.homeHouseX !== undefined &&
+      w.homeHouseY !== undefined &&
+      eligibleKey.has(`${w.homeHouseX},${w.homeHouseY}`)
+  );
 }
