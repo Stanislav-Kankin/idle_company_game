@@ -1,11 +1,11 @@
-export type Tool = "pan" | "road" | "house" | "well" | "bulldoze";
+export type Tool = "pan" | "road" | "house" | "well" | "market" | "bulldoze";
 
-export type CellType = "empty" | "road" | "house" | "well";
+export type CellType = "empty" | "road" | "house" | "well" | "market";
 
 export type Grid = {
   cols: number;
   rows: number;
-  cells: Uint8Array; // 0 empty, 1 road, 2 house, 3 well
+  cells: Uint8Array; // 0 empty, 1 road, 2 house, 3 well, 4 market
 };
 
 export function idx(x: number, y: number, cols: number) {
@@ -22,6 +22,7 @@ export function cellTypeAt(grid: Grid, x: number, y: number): CellType {
   if (v === 1) return "road";
   if (v === 2) return "house";
   if (v === 3) return "well";
+  if (v === 4) return "market";
   return "empty";
 }
 
@@ -34,9 +35,10 @@ export function hasAdjacentRoad(grid: Grid, x: number, y: number): boolean {
   );
 }
 
+// Low-level setter. Placement rules live in GameCanvas.
 export function setCell(grid: Grid, x: number, y: number, t: CellType) {
   if (x < 0 || y < 0 || x >= grid.cols || y >= grid.rows) return;
 
-  const v = t === "road" ? 1 : t === "house" ? 2 : t === "well" ? 3 : 0;
+  const v = t === "road" ? 1 : t === "house" ? 2 : t === "well" ? 3 : t === "market" ? 4 : 0;
   grid.cells[idx(x, y, grid.cols)] = v;
 }

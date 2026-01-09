@@ -30,7 +30,7 @@ export default function App() {
           fontFamily: "system-ui",
           fontSize: 14,
           zIndex: 10,
-          minWidth: 260,
+          minWidth: 300,
         }}
       >
         <div style={{ fontWeight: 700 }}>City Builder</div>
@@ -38,7 +38,11 @@ export default function App() {
 
         <div style={{ opacity: 0.88, marginTop: 6 }}>
           Tool: <b>{tool}</b>
-          {hover ? <span style={{ marginLeft: 8, opacity: 0.85 }}>Tile {hover.x},{hover.y}</span> : null}
+          {hover ? (
+            <span style={{ marginLeft: 8, opacity: 0.85 }}>
+              Tile {hover.x},{hover.y}
+            </span>
+          ) : null}
         </div>
 
         <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
@@ -51,6 +55,9 @@ export default function App() {
           <button onClick={() => setTool("well")} style={btnStyle(tool === "well")}>
             Well
           </button>
+          <button onClick={() => setTool("market")} style={btnStyle(tool === "market")}>
+            Market
+          </button>
           <button onClick={() => setTool("bulldoze")} style={btnStyle(tool === "bulldoze")}>
             Bulldoze
           </button>
@@ -58,10 +65,10 @@ export default function App() {
 
         <div style={{ opacity: 0.78, marginTop: 8 }}>Tap to build • Drag to move • Wheel to zoom</div>
         <div style={{ opacity: 0.78, marginTop: 4 }}>
-          Rules: <b>no overwrite</b>; <b>House</b> requires adjacent <b>Road</b>.
+          Rules: <b>no overwrite</b>; <b>House/Market</b> require adjacent <b>Road</b>.
         </div>
         <div style={{ opacity: 0.78, marginTop: 4 }}>
-          Use <b>Bulldoze</b> to remove placed tiles.
+          Market spawns a <b>market lady</b> (food service) • Well provides <b>water potential</b> (radius 3).
         </div>
       </div>
     </div>

@@ -6,15 +6,13 @@ import type { Camera } from "./camera";
 import { cellTypeAt, hasAdjacentRoad, type Grid, type Tool, setCell } from "../types";
 import {
   computeWellWaterPotential,
+  ensureMarketLadiesForMarkets,
   ensureWaterCarriersForHouses,
   stepWalkers,
   type Walker,
 } from "../sim/sim";
 
-export function GameCanvas(props: {
-  tool: Tool;
-  onHover?: (tile: { x: number; y: number } | null) => void;
-}) {
+export function GameCanvas(props: { tool: Tool; onHover?: (tile: { x: number; y: number } | null) => void }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const { w, h } = useCanvasSize();
 
@@ -26,10 +24,8 @@ export function GameCanvas(props: {
     cells: new Uint8Array(world.cols * world.rows),
   });
 
-  // Service highlight (walker-based, time-limited)
   const waterExpiryRef = useRef<Float64Array>(new Float64Array(world.cols * world.rows));
-
-  // Base availability (well radius-based, deterministic)
+  const foodExpiryRef = useRef<Float64Array>(new Float64Array(world.cols * world.rows));
   const waterPotentialRef = useRef<Uint8Array>(new Uint8Array(world.cols * world.rows));
 
   const walkersRef = useRef<Walker[]>([]);
@@ -41,13 +37,8 @@ export function GameCanvas(props: {
 
   const [version, setVersion] = useState(0);
 
-  useEffect(() => {
-    toolRef.current = props.tool;
-  }, [props.tool]);
-
-  useEffect(() => {
-    onHoverRef.current = props.onHover;
-  }, [props.onHover]);
+  useEffect(() => void (toolRef.current = props.tool), [props.tool]);
+  useEffect(() => void (onHoverRef.current = props.onHover), [props.onHover]);
 
   useEffect(() => {
     camRef.current = {
@@ -56,9 +47,7 @@ export function GameCanvas(props: {
       zoom: 1,
     };
 
-    // initial well -> water potential layer (radius=3, Manhattan)
     waterPotentialRef.current = computeWellWaterPotential(gridRef.current, 3);
-
     setVersion((v) => v + 1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -70,43 +59,38 @@ export function GameCanvas(props: {
     const cleanup = attachInput(
       canvas,
       () => camRef.current,
-      (next) => {
-        camRef.current = next;
-      },
+      (next) => (camRef.current = next),
       (tile) => {
         hoverRef.current = tile;
         onHoverRef.current?.(tile);
       },
-      (tile: { x: number; y: number }) => {
+      (tile) => {
         const t = toolRef.current;
-
-        // Rules:
-        //  - no overwrite (except bulldoze)
-        //  - house requires adjacent road
         const current = cellTypeAt(gridRef.current, tile.x, tile.y);
 
         if (t === "bulldoze") {
           if (current === "empty") return;
 
           setCell(gridRef.current, tile.x, tile.y, "empty");
-
-          // recompute only if we removed a well (water depends on wells)
-          if (current === "well") {
-            waterPotentialRef.current = computeWellWaterPotential(gridRef.current, 3);
-          }
+          if (current === "well") waterPotentialRef.current = computeWellWaterPotential(gridRef.current, 3);
 
           setVersion((v) => v + 1);
           return;
         }
 
         if (t === "pan") return;
-
-        // no overwrite
-        if (current !== "empty") return;
+        if (current !== "empty") return; // no overwrite
 
         if (t === "house") {
           if (!hasAdjacentRoad(gridRef.current, tile.x, tile.y)) return;
           setCell(gridRef.current, tile.x, tile.y, "house");
+          setVersion((v) => v + 1);
+          return;
+        }
+
+        if (t === "market") {
+          if (!hasAdjacentRoad(gridRef.current, tile.x, tile.y)) return;
+          setCell(gridRef.current, tile.x, tile.y, "market");
           setVersion((v) => v + 1);
           return;
         }
@@ -149,7 +133,6 @@ export function GameCanvas(props: {
     const loop = () => {
       const now = performance.now();
 
-      // Walkers are attached to ELIGIBLE houses (road + water potential)
       walkersRef.current = ensureWaterCarriersForHouses(
         gridRef.current,
         waterPotentialRef.current,
@@ -157,10 +140,15 @@ export function GameCanvas(props: {
         now
       );
 
-      walkersRef.current = stepWalkers(gridRef.current, walkersRef.current, now, waterExpiryRef.current, {
-        moveEveryMs: 450,
-        waterDurationMs: 12_000,
-      });
+      walkersRef.current = ensureMarketLadiesForMarkets(gridRef.current, walkersRef.current, now);
+
+      walkersRef.current = stepWalkers(
+        gridRef.current,
+        walkersRef.current,
+        now,
+        { waterExpiry: waterExpiryRef.current, foodExpiry: foodExpiryRef.current },
+        { moveEveryMs: 450, waterDurationMs: 12_000, foodDurationMs: 12_000 }
+      );
 
       render(
         ctx,
@@ -172,6 +160,7 @@ export function GameCanvas(props: {
         hoverRef.current,
         waterPotentialRef.current,
         waterExpiryRef.current,
+        foodExpiryRef.current,
         now,
         walkersRef.current
       );

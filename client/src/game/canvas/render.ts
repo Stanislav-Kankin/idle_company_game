@@ -20,13 +20,14 @@ function cellAt(grid: Grid, x: number, y: number) {
 function isRoad(grid: Grid, x: number, y: number) {
   return cellAt(grid, x, y) === 1;
 }
-
 function isHouse(grid: Grid, x: number, y: number) {
   return cellAt(grid, x, y) === 2;
 }
-
 function isWell(grid: Grid, x: number, y: number) {
   return cellAt(grid, x, y) === 3;
+}
+function isMarket(grid: Grid, x: number, y: number) {
+  return cellAt(grid, x, y) === 4;
 }
 
 function drawRoad(ctx: CanvasRenderingContext2D, x: number, y: number, tile: number, grid: Grid) {
@@ -63,7 +64,8 @@ function drawHouse(
   y: number,
   tile: number,
   hasWaterPotential: boolean,
-  recentlyServed: boolean
+  recentlyWatered: boolean,
+  recentlyFed: boolean
 ) {
   const px = x * tile;
   const py = y * tile;
@@ -87,18 +89,24 @@ function drawHouse(
   ctx.fillRect(px + 7, py + tile - 12, ww, ww);
   ctx.fillRect(px + tile - 7 - ww, py + tile - 12, ww, ww);
 
-  // Base: water potential from wells radius layer
   if (hasWaterPotential) {
     ctx.fillStyle = "rgba(59, 130, 246, 0.18)";
     ctx.fillRect(px + 3, py + 7, tile - 6, tile - 10);
   }
 
-  // Highlight: recently served by a walker (time-limited)
-  if (recentlyServed) {
+  if (recentlyWatered) {
     ctx.strokeStyle = "rgba(34, 211, 238, 0.65)";
     ctx.lineWidth = 2;
     ctx.strokeRect(px + 3.5, py + 7.5, tile - 7, tile - 11);
-  } else {
+  }
+
+  if (recentlyFed) {
+    ctx.strokeStyle = "rgba(34, 197, 94, 0.65)";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(px + 5.5, py + 9.5, tile - 11, tile - 15);
+  }
+
+  if (!recentlyWatered && !recentlyFed) {
     ctx.strokeStyle = "rgba(15, 23, 42, 0.55)";
     ctx.lineWidth = 2;
     ctx.strokeRect(px + 4.5, py + 8.5, tile - 9, tile - 11);
@@ -114,7 +122,7 @@ function drawWell(ctx: CanvasRenderingContext2D, x: number, y: number, tile: num
 
   const cx = px + tile / 2;
   const cy = py + tile / 2 + 2;
-  const r = Math.max(6, Math.floor(tile * 0.20));
+  const r = Math.max(6, Math.floor(tile * 0.2));
 
   ctx.fillStyle = "rgba(56, 189, 248, 0.85)";
   ctx.beginPath();
@@ -128,6 +136,24 @@ function drawWell(ctx: CanvasRenderingContext2D, x: number, y: number, tile: num
   ctx.stroke();
 }
 
+function drawMarket(ctx: CanvasRenderingContext2D, x: number, y: number, tile: number) {
+  const px = x * tile;
+  const py = y * tile;
+
+  ctx.fillStyle = "rgba(0,0,0,0.18)";
+  ctx.fillRect(px + 4, py + 6, tile - 8, tile - 8);
+
+  ctx.fillStyle = "rgba(251, 191, 36, 0.92)";
+  ctx.fillRect(px + 5, py + 10, tile - 10, tile - 14);
+
+  ctx.fillStyle = "rgba(239, 68, 68, 0.9)";
+  ctx.fillRect(px + 5, py + 8, tile - 10, 6);
+
+  ctx.strokeStyle = "rgba(15, 23, 42, 0.6)";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(px + 5.5, py + 9.5, tile - 11, tile - 15);
+}
+
 function drawWalker(ctx: CanvasRenderingContext2D, w: Walker, tile: number) {
   const px = w.x * tile;
   const py = w.y * tile;
@@ -135,7 +161,7 @@ function drawWalker(ctx: CanvasRenderingContext2D, w: Walker, tile: number) {
   const cy = py + tile / 2;
   const r = Math.max(5, Math.floor(tile * 0.18));
 
-  ctx.fillStyle = "rgba(250, 204, 21, 0.95)";
+  ctx.fillStyle = w.kind === "water" ? "rgba(34, 211, 238, 0.95)" : "rgba(250, 204, 21, 0.95)";
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
   ctx.fill();
@@ -157,6 +183,7 @@ export function render(
   hover: { x: number; y: number } | null,
   waterPotential: Uint8Array,
   waterExpiry: Float64Array,
+  foodExpiry: Float64Array,
   now: number,
   walkers: Walker[]
 ) {
@@ -184,19 +211,15 @@ export function render(
   const xEnd = Math.min(world.cols, Math.ceil(viewX1 / world.tile));
   const yEnd = Math.min(world.rows, Math.ceil(viewY1 / world.tile));
 
-  for (let y = yStart; y < yEnd; y++) {
-    for (let x = xStart; x < xEnd; x++) {
-      if (isRoad(grid, x, y)) drawRoad(ctx, x, y, world.tile, grid);
-    }
-  }
+  for (let y = yStart; y < yEnd; y++) for (let x = xStart; x < xEnd; x++) if (isRoad(grid, x, y)) drawRoad(ctx, x, y, world.tile, grid);
 
   for (let y = yStart; y < yEnd; y++) {
     for (let x = xStart; x < xEnd; x++) {
-      if (isWell(grid, x, y)) {
-        drawWell(ctx, x, y, world.tile);
-      } else if (isHouse(grid, x, y)) {
+      if (isWell(grid, x, y)) drawWell(ctx, x, y, world.tile);
+      else if (isMarket(grid, x, y)) drawMarket(ctx, x, y, world.tile);
+      else if (isHouse(grid, x, y)) {
         const i = y * grid.cols + x;
-        drawHouse(ctx, x, y, world.tile, waterPotential[i] === 1, waterExpiry[i] > now);
+        drawHouse(ctx, x, y, world.tile, waterPotential[i] === 1, waterExpiry[i] > now, foodExpiry[i] > now);
       }
     }
   }
@@ -227,16 +250,6 @@ export function render(
     ctx.fillRect(hover.x * world.tile, hover.y * world.tile, world.tile, world.tile);
 
     ctx.strokeStyle = "rgba(250, 204, 21, 0.55)";
-    ctx.strokeRect(
-      hover.x * world.tile + 0.5,
-      hover.y * world.tile + 0.5,
-      world.tile - 1,
-      world.tile - 1
-    );
+    ctx.strokeRect(hover.x * world.tile + 0.5, hover.y * world.tile + 0.5, world.tile - 1, world.tile - 1);
   }
-
-  const cx = Math.floor(world.cols / 2) * world.tile;
-  const cy = Math.floor(world.rows / 2) * world.tile;
-  ctx.fillStyle = "rgba(34, 197, 94, 0.9)";
-  ctx.fillRect(cx, cy, world.tile, world.tile);
 }
