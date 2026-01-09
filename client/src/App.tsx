@@ -1,9 +1,26 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import { fetchHealth } from "./api/health";
 import { GameCanvas } from "./game/canvas/GameCanvas";
 import type { CityStats, HouseInfo, Tool } from "./game/types";
 
 type BuildCosts = Record<Tool, number>;
+
+type MinimapPayload = {
+  cols: number;
+  rows: number;
+  cells: Uint8Array;
+  tileSize: number;
+  cam: { x: number; y: number; zoom: number };
+  viewW: number;
+  viewH: number;
+};
+
+type CameraApi = {
+  centerOnWorld: (worldX: number, worldY: number) => void;
+};
+
+const MINIMAP_SCALE = 2;
 
 const START_MONEY = 1000;
 
@@ -23,6 +40,12 @@ export default function App() {
 
   const [toast, setToast] = useState<string | null>(null);
 
+  const minimapCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const minimapStateRef = useRef<MinimapPayload | null>(null);
+
+  const cameraApiRef = useRef<CameraApi | null>(null);
+  const minimapDragRef = useRef<{ active: boolean; pointerId: number | null }>({ active: false, pointerId: null });
+
   const buildCosts: BuildCosts = useMemo(
     () => ({
       pan: 0,
@@ -30,7 +53,7 @@ export default function App() {
       house: 100,
       well: 30,
       market: 200,
-      bulldoze: 30, // Снос тоже стоит денег
+      bulldoze: 30,
     }),
     []
   );
@@ -78,7 +101,64 @@ export default function App() {
     return true;
   };
 
+  const onCameraApi = useCallback((api: CameraApi) => {
+    cameraApiRef.current = api;
+  }, []);
+
   const population = stats?.population ?? 0;
+
+  const minimapPointerToWorld = (e: ReactPointerEvent<HTMLCanvasElement>) => {
+    const p = minimapStateRef.current;
+    if (!p) return null;
+
+    const canvas = e.currentTarget;
+    const rect = canvas.getBoundingClientRect();
+    const nx = (e.clientX - rect.left) / Math.max(1, rect.width);
+    const ny = (e.clientY - rect.top) / Math.max(1, rect.height);
+
+    const px = nx * canvas.width;
+    const py = ny * canvas.height;
+
+    const tileX = Math.max(0, Math.min(p.cols - 1, Math.floor(px / MINIMAP_SCALE)));
+    const tileY = Math.max(0, Math.min(p.rows - 1, Math.floor(py / MINIMAP_SCALE)));
+
+    const worldX = (tileX + 0.5) * p.tileSize;
+    const worldY = (tileY + 0.5) * p.tileSize;
+    return { worldX, worldY };
+  };
+
+  const handleMinimapPointerDown = (e: ReactPointerEvent<HTMLCanvasElement>) => {
+    minimapDragRef.current.active = true;
+    minimapDragRef.current.pointerId = e.pointerId;
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {}
+
+    const pos = minimapPointerToWorld(e);
+    if (pos && cameraApiRef.current) {
+      cameraApiRef.current.centerOnWorld(pos.worldX, pos.worldY);
+    }
+  };
+
+  const handleMinimapPointerMove = (e: ReactPointerEvent<HTMLCanvasElement>) => {
+    if (!minimapDragRef.current.active) return;
+    const pos = minimapPointerToWorld(e);
+    if (pos && cameraApiRef.current) {
+      cameraApiRef.current.centerOnWorld(pos.worldX, pos.worldY);
+    }
+  };
+
+  const handleMinimapPointerUp = (e: ReactPointerEvent<HTMLCanvasElement>) => {
+    if (!minimapDragRef.current.active) return;
+    minimapDragRef.current.active = false;
+
+    const pid = minimapDragRef.current.pointerId;
+    minimapDragRef.current.pointerId = null;
+
+    try {
+      if (pid !== null) e.currentTarget.releasePointerCapture(pid);
+    } catch {}
+  };
 
   return (
     <div>
@@ -86,6 +166,14 @@ export default function App() {
         tool={tool}
         buildCosts={buildCosts}
         trySpend={trySpend}
+        onCameraApi={onCameraApi}
+        onMinimap={(p: MinimapPayload) => {
+          minimapStateRef.current = p;
+
+          const c = minimapCanvasRef.current;
+          if (!c) return;
+          drawMinimap(c, p, MINIMAP_SCALE);
+        }}
         onHover={(t: { x: number; y: number } | null) => {
           setHoverTile(t);
           if (!t) setHoverHouse(null);
@@ -173,20 +261,35 @@ export default function App() {
         }}
       >
         <div style={{ fontWeight: 900, marginBottom: 8 }}>Миникарта</div>
+
         <div
           style={{
             height: 110,
             borderRadius: 12,
             background: "rgba(255,255,255,0.06)",
             border: "1px solid rgba(255,255,255,0.12)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 12,
-            opacity: 0.75,
+            overflow: "hidden",
           }}
         >
-          (заглушка)
+          <canvas
+            ref={minimapCanvasRef}
+            onPointerDown={handleMinimapPointerDown}
+            onPointerMove={handleMinimapPointerMove}
+            onPointerUp={handleMinimapPointerUp}
+            onPointerCancel={handleMinimapPointerUp}
+            style={{
+              width: "100%",
+              height: "100%",
+              display: "block",
+              imageRendering: "pixelated",
+              touchAction: "none",
+              cursor: "pointer",
+            }}
+          />
+        </div>
+
+        <div style={{ opacity: 0.72, fontSize: 12, marginTop: 6, lineHeight: 1.25 }}>
+          Тап/drag по миникарте — переместить камеру
         </div>
 
         <div style={{ fontWeight: 900, marginTop: 12 }}>Строительство</div>
@@ -344,4 +447,40 @@ function btnStyle(active: boolean): CSSProperties {
     color: "white",
     fontWeight: 900,
   };
+}
+
+function drawMinimap(canvas: HTMLCanvasElement, payload: MinimapPayload, scale: number) {
+  const { cols, rows, cells, tileSize, cam, viewW, viewH } = payload;
+
+  const w = Math.max(1, cols * scale);
+  const h = Math.max(1, rows * scale);
+
+  if (canvas.width !== w) canvas.width = w;
+  if (canvas.height !== h) canvas.height = h;
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+
+  ctx.clearRect(0, 0, w, h);
+
+  // 0 empty, 1 road, 2 house, 3 well, 4 market
+  const palette = ["#0b1220", "#9ca3af", "#3b82f6", "#22d3ee", "#f59e0b"];
+
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const v = cells[y * cols + x] ?? 0;
+      ctx.fillStyle = palette[v] ?? palette[0];
+      ctx.fillRect(x * scale, y * scale, scale, scale);
+    }
+  }
+
+  // camera rect in tile coords
+  const x0 = cam.x / tileSize;
+  const y0 = cam.y / tileSize;
+  const wTiles = (viewW / Math.max(0.0001, cam.zoom)) / tileSize;
+  const hTiles = (viewH / Math.max(0.0001, cam.zoom)) / tileSize;
+
+  ctx.strokeStyle = "rgba(255, 255, 0, 0.95)";
+  ctx.lineWidth = Math.max(1, scale);
+  ctx.strokeRect(x0 * scale, y0 * scale, wTiles * scale, hTiles * scale);
 }

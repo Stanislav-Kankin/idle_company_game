@@ -3,6 +3,7 @@ import { useCanvasSize } from "./useCanvasSize";
 import { render, type WorldConfig } from "./render";
 import { attachInput } from "./input";
 import type { Camera } from "./camera";
+import { clamp } from "./camera";
 import { cellTypeAt, hasAdjacentRoad, type CityStats, type Grid, type HouseInfo, type Tool, setCell } from "../types";
 import {
   computeCityStats,
@@ -16,6 +17,20 @@ import {
   type Walker,
 } from "../sim/sim";
 
+type MinimapPayload = {
+  cols: number;
+  rows: number;
+  cells: Uint8Array;
+  tileSize: number;
+  cam: Camera;
+  viewW: number;
+  viewH: number;
+};
+
+type CameraApi = {
+  centerOnWorld: (worldX: number, worldY: number) => void;
+};
+
 export function GameCanvas(props: {
   tool: Tool;
   onHover?: (tile: { x: number; y: number } | null) => void;
@@ -24,6 +39,9 @@ export function GameCanvas(props: {
   onHouseHoverInfo?: (info: HouseInfo | null) => void;
   onHouseSelect?: (info: HouseInfo | null) => void;
   onStats?: (stats: CityStats) => void;
+
+  onMinimap?: (payload: MinimapPayload) => void;
+  onCameraApi?: (api: CameraApi) => void;
 
   // economy (UI-owned for now)
   buildCosts: Record<Tool, number>;
@@ -58,6 +76,7 @@ export function GameCanvas(props: {
   const onHouseHoverInfoRef = useRef<typeof props.onHouseHoverInfo>(props.onHouseHoverInfo);
   const onHouseSelectRef = useRef<typeof props.onHouseSelect>(props.onHouseSelect);
   const onStatsRef = useRef<typeof props.onStats>(props.onStats);
+  const onMinimapRef = useRef<typeof props.onMinimap>(props.onMinimap);
 
   const buildCostsRef = useRef<Record<Tool, number>>(props.buildCosts);
   const trySpendRef = useRef<(amount: number) => boolean>(props.trySpend);
@@ -67,8 +86,39 @@ export function GameCanvas(props: {
   useEffect(() => void (onHouseHoverInfoRef.current = props.onHouseHoverInfo), [props.onHouseHoverInfo]);
   useEffect(() => void (onHouseSelectRef.current = props.onHouseSelect), [props.onHouseSelect]);
   useEffect(() => void (onStatsRef.current = props.onStats), [props.onStats]);
+  useEffect(() => void (onMinimapRef.current = props.onMinimap), [props.onMinimap]);
   useEffect(() => void (buildCostsRef.current = props.buildCosts), [props.buildCosts]);
   useEffect(() => void (trySpendRef.current = props.trySpend), [props.trySpend]);
+
+  // Register camera API for minimap control (tap/drag)
+  useEffect(() => {
+    if (!props.onCameraApi) return;
+
+    const centerOnWorld = (worldX: number, worldY: number) => {
+      const cam = camRef.current;
+      const zoom = Math.max(0.0001, cam.zoom);
+
+      const worldW = world.cols * world.tile;
+      const worldH = world.rows * world.tile;
+
+      const viewWorldW = w / zoom;
+      const viewWorldH = h / zoom;
+
+      const nx = worldX - viewWorldW / 2;
+      const ny = worldY - viewWorldH / 2;
+
+      const maxX = Math.max(0, worldW - viewWorldW);
+      const maxY = Math.max(0, worldH - viewWorldH);
+
+      camRef.current = {
+        ...cam,
+        x: clamp(nx, 0, maxX),
+        y: clamp(ny, 0, maxY),
+      };
+    };
+
+    props.onCameraApi({ centerOnWorld });
+  }, [props.onCameraApi, w, h, world]);
 
   // init / re-center once we know canvas size
   useEffect(() => {
@@ -218,26 +268,20 @@ export function GameCanvas(props: {
 
     let raf = 0;
     let lastStatsAt = 0;
+    let lastMinimapAt = 0;
 
     const loop = () => {
       const now = performance.now();
 
       // ensure & cleanup walkers (NOTE: these functions return the filtered array)
-      walkersRef.current = ensureWaterCarriersForHouses(
-        gridRef.current,
-        waterPotentialRef.current,
-        walkersRef.current,
-        now
-      );
+      walkersRef.current = ensureWaterCarriersForHouses(gridRef.current, waterPotentialRef.current, walkersRef.current, now);
       walkersRef.current = ensureMarketLadiesForMarkets(gridRef.current, walkersRef.current, now);
 
       // step walkers (food/water service)
-      walkersRef.current = stepWalkers(
-        gridRef.current,
-        walkersRef.current,
-        now,
-        { waterExpiry: waterExpiryRef.current, foodExpiry: foodExpiryRef.current }
-      );
+      walkersRef.current = stepWalkers(gridRef.current, walkersRef.current, now, {
+        waterExpiry: waterExpiryRef.current,
+        foodExpiry: foodExpiryRef.current,
+      });
 
       // house leveling
       stepHouseEvolution(
@@ -262,6 +306,20 @@ export function GameCanvas(props: {
           now
         );
         onStatsRef.current(s);
+      }
+
+      // minimap (throttled)
+      if (onMinimapRef.current && now - lastMinimapAt >= 250) {
+        lastMinimapAt = now;
+        onMinimapRef.current({
+          cols: gridRef.current.cols,
+          rows: gridRef.current.rows,
+          cells: gridRef.current.cells.slice(),
+          tileSize: world.tile,
+          cam: { ...camRef.current },
+          viewW: w,
+          viewH: h,
+        });
       }
 
       // render (IMPORTANT: order matches render.ts signature)
