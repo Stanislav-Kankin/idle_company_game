@@ -3,16 +3,29 @@ import { useCanvasSize } from "./useCanvasSize";
 import { render, type WorldConfig } from "./render";
 import { attachInput } from "./input";
 import type { Camera } from "./camera";
-import { cellTypeAt, hasAdjacentRoad, type Grid, type Tool, setCell } from "../types";
+import { cellTypeAt, hasAdjacentRoad, type CityStats, type Grid, type HouseInfo, type Tool, setCell } from "../types";
 import {
+  computeCityStats,
+  computeHousePopulation,
   computeWellWaterPotential,
   ensureMarketLadiesForMarkets,
   ensureWaterCarriersForHouses,
+  MARKET_RADIUS,
+  stepHouseEvolution,
   stepWalkers,
+  WELL_RADIUS,
   type Walker,
 } from "../sim/sim";
 
-export function GameCanvas(props: { tool: Tool; onHover?: (tile: { x: number; y: number } | null) => void }) {
+export function GameCanvas(props: {
+  tool: Tool;
+  onHover?: (tile: { x: number; y: number } | null) => void;
+
+  // inspector / stats callbacks
+  onHouseHoverInfo?: (info: HouseInfo | null) => void;
+  onHouseSelect?: (info: HouseInfo | null) => void;
+  onStats?: (stats: CityStats) => void;
+}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const { w, h } = useCanvasSize();
 
@@ -28,17 +41,43 @@ export function GameCanvas(props: { tool: Tool; onHover?: (tile: { x: number; y:
   const foodExpiryRef = useRef<Float64Array>(new Float64Array(world.cols * world.rows));
   const waterPotentialRef = useRef<Uint8Array>(new Uint8Array(world.cols * world.rows));
 
+  // houses state
+  const houseLevelsRef = useRef<Uint8Array>(new Uint8Array(world.cols * world.rows)); // 0=none, 1..3
+  const houseSatisfiedSinceRef = useRef<Float64Array>(new Float64Array(world.cols * world.rows)); // ms (performance.now)
+
   const walkersRef = useRef<Walker[]>([]);
   const hoverRef = useRef<{ x: number; y: number } | null>(null);
   const camRef = useRef<Camera>({ x: 0, y: 0, zoom: 1 });
 
   const toolRef = useRef<Tool>(props.tool);
   const onHoverRef = useRef<typeof props.onHover>(props.onHover);
+  const onHouseHoverInfoRef = useRef<typeof props.onHouseHoverInfo>(props.onHouseHoverInfo);
+  const onHouseSelectRef = useRef<typeof props.onHouseSelect>(props.onHouseSelect);
+  const onStatsRef = useRef<typeof props.onStats>(props.onStats);
 
   const [version, setVersion] = useState(0);
 
   useEffect(() => void (toolRef.current = props.tool), [props.tool]);
   useEffect(() => void (onHoverRef.current = props.onHover), [props.onHover]);
+  useEffect(() => void (onHouseHoverInfoRef.current = props.onHouseHoverInfo), [props.onHouseHoverInfo]);
+  useEffect(() => void (onHouseSelectRef.current = props.onHouseSelect), [props.onHouseSelect]);
+  useEffect(() => void (onStatsRef.current = props.onStats), [props.onStats]);
+
+  function getHouseInfoAt(x: number, y: number, now: number): HouseInfo | null {
+    if (cellTypeAt(gridRef.current, x, y) !== "house") return null;
+
+    const i = y * gridRef.current.cols + x;
+    const level = houseLevelsRef.current[i] || 1;
+
+    const hasRoadAdj = hasAdjacentRoad(gridRef.current, x, y);
+    const hasWaterPotential = waterPotentialRef.current[i] === 1;
+    const waterServed = waterExpiryRef.current[i] > now;
+    const foodServed = foodExpiryRef.current[i] > now;
+
+    const population = computeHousePopulation(level, hasRoadAdj, hasWaterPotential, foodServed);
+
+    return { x, y, level, population, hasRoadAdj, hasWaterPotential, waterServed, foodServed };
+  }
 
   useEffect(() => {
     camRef.current = {
@@ -47,7 +86,9 @@ export function GameCanvas(props: { tool: Tool; onHover?: (tile: { x: number; y:
       zoom: 1,
     };
 
-    waterPotentialRef.current = computeWellWaterPotential(gridRef.current, 3);
+    // fixed radiuses
+    waterPotentialRef.current = computeWellWaterPotential(gridRef.current, WELL_RADIUS);
+
     setVersion((v) => v + 1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -63,16 +104,34 @@ export function GameCanvas(props: { tool: Tool; onHover?: (tile: { x: number; y:
       (tile) => {
         hoverRef.current = tile;
         onHoverRef.current?.(tile);
+
+        const now = performance.now();
+        const info = tile ? getHouseInfoAt(tile.x, tile.y, now) : null;
+        onHouseHoverInfoRef.current?.(info);
       },
       (tile) => {
         const t = toolRef.current;
         const current = cellTypeAt(gridRef.current, tile.x, tile.y);
 
+        // If user taps/clicks on an existing house (and not bulldozing) -> open inspector (mobile-friendly)
+        if (current === "house" && t !== "bulldoze") {
+          const info = getHouseInfoAt(tile.x, tile.y, performance.now());
+          onHouseSelectRef.current?.(info);
+          return;
+        }
+
         if (t === "bulldoze") {
           if (current === "empty") return;
 
           setCell(gridRef.current, tile.x, tile.y, "empty");
-          if (current === "well") waterPotentialRef.current = computeWellWaterPotential(gridRef.current, 3);
+
+          const i = tile.y * gridRef.current.cols + tile.x;
+          houseLevelsRef.current[i] = 0;
+          houseSatisfiedSinceRef.current[i] = 0;
+
+          if (current === "well") {
+            waterPotentialRef.current = computeWellWaterPotential(gridRef.current, WELL_RADIUS);
+          }
 
           setVersion((v) => v + 1);
           return;
@@ -84,6 +143,11 @@ export function GameCanvas(props: { tool: Tool; onHover?: (tile: { x: number; y:
         if (t === "house") {
           if (!hasAdjacentRoad(gridRef.current, tile.x, tile.y)) return;
           setCell(gridRef.current, tile.x, tile.y, "house");
+
+          const i = tile.y * gridRef.current.cols + tile.x;
+          houseLevelsRef.current[i] = 1;
+          houseSatisfiedSinceRef.current[i] = 0;
+
           setVersion((v) => v + 1);
           return;
         }
@@ -103,7 +167,7 @@ export function GameCanvas(props: { tool: Tool; onHover?: (tile: { x: number; y:
 
         if (t === "well") {
           setCell(gridRef.current, tile.x, tile.y, "well");
-          waterPotentialRef.current = computeWellWaterPotential(gridRef.current, 3);
+          waterPotentialRef.current = computeWellWaterPotential(gridRef.current, WELL_RADIUS);
           setVersion((v) => v + 1);
           return;
         }
@@ -129,17 +193,12 @@ export function GameCanvas(props: { tool: Tool; onHover?: (tile: { x: number; y:
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     let raf = 0;
+    let lastStatsAt = 0;
 
     const loop = () => {
       const now = performance.now();
 
-      walkersRef.current = ensureWaterCarriersForHouses(
-        gridRef.current,
-        waterPotentialRef.current,
-        walkersRef.current,
-        now
-      );
-
+      walkersRef.current = ensureWaterCarriersForHouses(gridRef.current, waterPotentialRef.current, walkersRef.current, now);
       walkersRef.current = ensureMarketLadiesForMarkets(gridRef.current, walkersRef.current, now);
 
       walkersRef.current = stepWalkers(
@@ -149,6 +208,32 @@ export function GameCanvas(props: { tool: Tool; onHover?: (tile: { x: number; y:
         { waterExpiry: waterExpiryRef.current, foodExpiry: foodExpiryRef.current },
         { moveEveryMs: 450, waterDurationMs: 12_000, foodDurationMs: 12_000 }
       );
+
+      // evolution: needs water+food service delivered (not just potential)
+      stepHouseEvolution(
+        gridRef.current,
+        waterPotentialRef.current,
+        waterExpiryRef.current,
+        foodExpiryRef.current,
+        houseLevelsRef.current,
+        houseSatisfiedSinceRef.current,
+        now,
+        { upgradeDelayMs: 10_000 }
+      );
+
+      // stats: compute every ~500ms (cheap & stable)
+      if (onStatsRef.current && now - lastStatsAt >= 500) {
+        lastStatsAt = now;
+        const stats = computeCityStats(
+          gridRef.current,
+          waterPotentialRef.current,
+          waterExpiryRef.current,
+          foodExpiryRef.current,
+          houseLevelsRef.current,
+          now
+        );
+        onStatsRef.current(stats);
+      }
 
       render(
         ctx,
@@ -161,6 +246,7 @@ export function GameCanvas(props: { tool: Tool; onHover?: (tile: { x: number; y:
         waterPotentialRef.current,
         waterExpiryRef.current,
         foodExpiryRef.current,
+        houseLevelsRef.current,
         now,
         walkersRef.current
       );

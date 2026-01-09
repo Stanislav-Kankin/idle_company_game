@@ -8,6 +8,30 @@ export type Grid = {
   cells: Uint8Array; // 0 empty, 1 road, 2 house, 3 well, 4 market
 };
 
+export type HouseInfo = {
+  x: number;
+  y: number;
+  level: number; // 1..3
+  population: number;
+
+  hasRoadAdj: boolean;
+  hasWaterPotential: boolean;
+
+  waterServed: boolean; // time-limited (walker)
+  foodServed: boolean; // time-limited (walker)
+};
+
+export type CityStats = {
+  population: number;
+
+  housesTotal: number;
+  housesByLevel: { 1: number; 2: number; 3: number };
+
+  withWaterPotential: number;
+  withWaterServed: number;
+  withFoodServed: number;
+};
+
 export function idx(x: number, y: number, cols: number) {
   return y * cols + x;
 }

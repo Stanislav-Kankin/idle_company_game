@@ -63,6 +63,7 @@ function drawHouse(
   x: number,
   y: number,
   tile: number,
+  level: number,
   hasWaterPotential: boolean,
   recentlyWatered: boolean,
   recentlyFed: boolean
@@ -73,10 +74,16 @@ function drawHouse(
   ctx.fillStyle = "rgba(0,0,0,0.18)";
   ctx.fillRect(px + 4, py + 6, tile - 8, tile - 8);
 
-  ctx.fillStyle = "rgba(59, 130, 246, 0.88)";
+  // slightly different body per level
+  const body =
+    level <= 1 ? "rgba(59, 130, 246, 0.88)" : level === 2 ? "rgba(99, 102, 241, 0.88)" : "rgba(168, 85, 247, 0.88)";
+  const roof =
+    level <= 1 ? "rgba(37, 99, 235, 0.95)" : level === 2 ? "rgba(79, 70, 229, 0.95)" : "rgba(147, 51, 234, 0.95)";
+
+  ctx.fillStyle = body;
   ctx.fillRect(px + 4, py + 8, tile - 8, tile - 10);
 
-  ctx.fillStyle = "rgba(37, 99, 235, 0.95)";
+  ctx.fillStyle = roof;
   ctx.beginPath();
   ctx.moveTo(px + 4, py + 10);
   ctx.lineTo(px + tile / 2, py + 2);
@@ -184,6 +191,7 @@ export function render(
   waterPotential: Uint8Array,
   waterExpiry: Float64Array,
   foodExpiry: Float64Array,
+  houseLevels: Uint8Array,
   now: number,
   walkers: Walker[]
 ) {
@@ -219,7 +227,8 @@ export function render(
       else if (isMarket(grid, x, y)) drawMarket(ctx, x, y, world.tile);
       else if (isHouse(grid, x, y)) {
         const i = y * grid.cols + x;
-        drawHouse(ctx, x, y, world.tile, waterPotential[i] === 1, waterExpiry[i] > now, foodExpiry[i] > now);
+        const level = houseLevels[i] || 1;
+        drawHouse(ctx, x, y, world.tile, level, waterPotential[i] === 1, waterExpiry[i] > now, foodExpiry[i] > now);
       }
     }
   }
