@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useCanvasSize } from "./useCanvasSize";
 import { render, type WorldConfig } from "./render";
 import { attachInput } from "./input";
@@ -10,7 +10,6 @@ import {
   computeWellWaterPotential,
   ensureMarketLadiesForMarkets,
   ensureWaterCarriersForHouses,
-  MARKET_RADIUS,
   stepHouseEvolution,
   stepWalkers,
   WELL_RADIUS,
@@ -25,6 +24,10 @@ export function GameCanvas(props: {
   onHouseHoverInfo?: (info: HouseInfo | null) => void;
   onHouseSelect?: (info: HouseInfo | null) => void;
   onStats?: (stats: CityStats) => void;
+
+  // economy (UI-owned for now)
+  buildCosts: Record<Tool, number>;
+  trySpend: (amount: number) => boolean;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const { w, h } = useCanvasSize();
@@ -41,13 +44,14 @@ export function GameCanvas(props: {
   const foodExpiryRef = useRef<Float64Array>(new Float64Array(world.cols * world.rows));
   const waterPotentialRef = useRef<Uint8Array>(new Uint8Array(world.cols * world.rows));
 
-  // houses state
-  const houseLevelsRef = useRef<Uint8Array>(new Uint8Array(world.cols * world.rows)); // 0=none, 1..3
+  // NOTE: sim/render expect Uint8Array for house levels
+  const houseLevelsRef = useRef<Uint8Array>(new Uint8Array(world.cols * world.rows));
   const houseSatisfiedSinceRef = useRef<Float64Array>(new Float64Array(world.cols * world.rows)); // ms (performance.now)
 
   const walkersRef = useRef<Walker[]>([]);
   const hoverRef = useRef<{ x: number; y: number } | null>(null);
   const camRef = useRef<Camera>({ x: 0, y: 0, zoom: 1 });
+  const camInitializedRef = useRef(false);
 
   const toolRef = useRef<Tool>(props.tool);
   const onHoverRef = useRef<typeof props.onHover>(props.onHover);
@@ -55,13 +59,33 @@ export function GameCanvas(props: {
   const onHouseSelectRef = useRef<typeof props.onHouseSelect>(props.onHouseSelect);
   const onStatsRef = useRef<typeof props.onStats>(props.onStats);
 
-  const [version, setVersion] = useState(0);
+  const buildCostsRef = useRef<Record<Tool, number>>(props.buildCosts);
+  const trySpendRef = useRef<(amount: number) => boolean>(props.trySpend);
 
   useEffect(() => void (toolRef.current = props.tool), [props.tool]);
   useEffect(() => void (onHoverRef.current = props.onHover), [props.onHover]);
   useEffect(() => void (onHouseHoverInfoRef.current = props.onHouseHoverInfo), [props.onHouseHoverInfo]);
   useEffect(() => void (onHouseSelectRef.current = props.onHouseSelect), [props.onHouseSelect]);
   useEffect(() => void (onStatsRef.current = props.onStats), [props.onStats]);
+  useEffect(() => void (buildCostsRef.current = props.buildCosts), [props.buildCosts]);
+  useEffect(() => void (trySpendRef.current = props.trySpend), [props.trySpend]);
+
+  // init / re-center once we know canvas size
+  useEffect(() => {
+    if (camInitializedRef.current) return;
+    if (w <= 0 || h <= 0) return;
+
+    const worldW = world.cols * world.tile;
+    const worldH = world.rows * world.tile;
+
+    camRef.current = {
+      x: Math.max(0, worldW / 2 - w / 2),
+      y: Math.max(0, worldH / 2 - h / 2),
+      zoom: 1,
+    };
+
+    camInitializedRef.current = true;
+  }, [w, h, world]);
 
   function getHouseInfoAt(x: number, y: number, now: number): HouseInfo | null {
     if (cellTypeAt(gridRef.current, x, y) !== "house") return null;
@@ -79,29 +103,19 @@ export function GameCanvas(props: {
     return { x, y, level, population, hasRoadAdj, hasWaterPotential, waterServed, foodServed };
   }
 
-  useEffect(() => {
-    camRef.current = {
-      x: (world.cols * world.tile) / 2 - w / 2,
-      y: (world.rows * world.tile) / 2 - h / 2,
-      zoom: 1,
-    };
-
-    // fixed radiuses
-    waterPotentialRef.current = computeWellWaterPotential(gridRef.current, WELL_RADIUS);
-
-    setVersion((v) => v + 1);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
+  // Input + placement rules (economy included)
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+
+    // initial potential (even if no wells yet)
+    waterPotentialRef.current = computeWellWaterPotential(gridRef.current, WELL_RADIUS);
 
     const cleanup = attachInput(
       canvas,
       () => camRef.current,
       (next) => (camRef.current = next),
-      (tile) => {
+      (tile: { x: number; y: number } | null) => {
         hoverRef.current = tile;
         onHoverRef.current?.(tile);
 
@@ -109,11 +123,11 @@ export function GameCanvas(props: {
         const info = tile ? getHouseInfoAt(tile.x, tile.y, now) : null;
         onHouseHoverInfoRef.current?.(info);
       },
-      (tile) => {
+      (tile: { x: number; y: number }) => {
         const t = toolRef.current;
         const current = cellTypeAt(gridRef.current, tile.x, tile.y);
 
-        // If user taps/clicks on an existing house (and not bulldozing) -> open inspector (mobile-friendly)
+        // tap existing house -> open inspector (unless bulldoze)
         if (current === "house" && t !== "bulldoze") {
           const info = getHouseInfoAt(tile.x, tile.y, performance.now());
           onHouseSelectRef.current?.(info);
@@ -122,6 +136,9 @@ export function GameCanvas(props: {
 
         if (t === "bulldoze") {
           if (current === "empty") return;
+
+          const cost = buildCostsRef.current.bulldoze ?? 0;
+          if (!trySpendRef.current(cost)) return;
 
           setCell(gridRef.current, tile.x, tile.y, "empty");
 
@@ -133,7 +150,6 @@ export function GameCanvas(props: {
             waterPotentialRef.current = computeWellWaterPotential(gridRef.current, WELL_RADIUS);
           }
 
-          setVersion((v) => v + 1);
           return;
         }
 
@@ -142,33 +158,43 @@ export function GameCanvas(props: {
 
         if (t === "house") {
           if (!hasAdjacentRoad(gridRef.current, tile.x, tile.y)) return;
+
+          const cost = buildCostsRef.current.house ?? 0;
+          if (!trySpendRef.current(cost)) return;
+
           setCell(gridRef.current, tile.x, tile.y, "house");
 
           const i = tile.y * gridRef.current.cols + tile.x;
           houseLevelsRef.current[i] = 1;
           houseSatisfiedSinceRef.current[i] = 0;
 
-          setVersion((v) => v + 1);
           return;
         }
 
         if (t === "market") {
           if (!hasAdjacentRoad(gridRef.current, tile.x, tile.y)) return;
+
+          const cost = buildCostsRef.current.market ?? 0;
+          if (!trySpendRef.current(cost)) return;
+
           setCell(gridRef.current, tile.x, tile.y, "market");
-          setVersion((v) => v + 1);
           return;
         }
 
         if (t === "road") {
+          const cost = buildCostsRef.current.road ?? 0;
+          if (!trySpendRef.current(cost)) return;
+
           setCell(gridRef.current, tile.x, tile.y, "road");
-          setVersion((v) => v + 1);
           return;
         }
 
         if (t === "well") {
+          const cost = buildCostsRef.current.well ?? 0;
+          if (!trySpendRef.current(cost)) return;
+
           setCell(gridRef.current, tile.x, tile.y, "well");
           waterPotentialRef.current = computeWellWaterPotential(gridRef.current, WELL_RADIUS);
-          setVersion((v) => v + 1);
           return;
         }
       },
@@ -178,6 +204,7 @@ export function GameCanvas(props: {
     return cleanup;
   }, [world.tile]);
 
+  // Simulation + render loop
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -185,12 +212,9 @@ export function GameCanvas(props: {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const dpr = Math.max(1, window.devicePixelRatio || 1);
-    canvas.width = Math.floor(w * dpr);
-    canvas.height = Math.floor(h * dpr);
-    canvas.style.width = `${w}px`;
-    canvas.style.height = `${h}px`;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // render.ts works in CSS pixels, keep canvas same size
+    canvas.width = w;
+    canvas.height = h;
 
     let raf = 0;
     let lastStatsAt = 0;
@@ -198,18 +222,24 @@ export function GameCanvas(props: {
     const loop = () => {
       const now = performance.now();
 
-      walkersRef.current = ensureWaterCarriersForHouses(gridRef.current, waterPotentialRef.current, walkersRef.current, now);
+      // ensure & cleanup walkers (NOTE: these functions return the filtered array)
+      walkersRef.current = ensureWaterCarriersForHouses(
+        gridRef.current,
+        waterPotentialRef.current,
+        walkersRef.current,
+        now
+      );
       walkersRef.current = ensureMarketLadiesForMarkets(gridRef.current, walkersRef.current, now);
 
+      // step walkers (food/water service)
       walkersRef.current = stepWalkers(
         gridRef.current,
         walkersRef.current,
         now,
-        { waterExpiry: waterExpiryRef.current, foodExpiry: foodExpiryRef.current },
-        { moveEveryMs: 450, waterDurationMs: 12_000, foodDurationMs: 12_000 }
+        { waterExpiry: waterExpiryRef.current, foodExpiry: foodExpiryRef.current }
       );
 
-      // evolution: needs water+food service delivered (not just potential)
+      // house leveling
       stepHouseEvolution(
         gridRef.current,
         waterPotentialRef.current,
@@ -217,14 +247,13 @@ export function GameCanvas(props: {
         foodExpiryRef.current,
         houseLevelsRef.current,
         houseSatisfiedSinceRef.current,
-        now,
-        { upgradeDelayMs: 10_000 }
+        now
       );
 
-      // stats: compute every ~500ms (cheap & stable)
+      // stats ~2 times/sec
       if (onStatsRef.current && now - lastStatsAt >= 500) {
         lastStatsAt = now;
-        const stats = computeCityStats(
+        const s = computeCityStats(
           gridRef.current,
           waterPotentialRef.current,
           waterExpiryRef.current,
@@ -232,9 +261,10 @@ export function GameCanvas(props: {
           houseLevelsRef.current,
           now
         );
-        onStatsRef.current(stats);
+        onStatsRef.current(s);
       }
 
+      // render (IMPORTANT: order matches render.ts signature)
       render(
         ctx,
         w,
@@ -256,7 +286,7 @@ export function GameCanvas(props: {
 
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [w, h, world, version]);
+  }, [w, h, world]);
 
   return <canvas ref={canvasRef} style={{ display: "block", width: "100vw", height: "100vh", touchAction: "none" }} />;
 }
