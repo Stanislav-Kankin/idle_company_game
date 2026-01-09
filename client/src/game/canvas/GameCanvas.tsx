@@ -3,7 +3,7 @@ import { useCanvasSize } from "./useCanvasSize";
 import { render, type WorldConfig } from "./render";
 import { attachInput } from "./input";
 import type { Camera } from "./camera";
-import { type Grid, type Tool, setCell } from "../types";
+import { cellTypeAt, hasAdjacentRoad, type Grid, type Tool, setCell } from "../types";
 import {
   computeWellWaterPotential,
   ensureWaterCarriersForHouses,
@@ -80,19 +80,49 @@ export function GameCanvas(props: {
       (tile: { x: number; y: number }) => {
         const t = toolRef.current;
 
-        if (t === "road") {
-          setCell(gridRef.current, tile.x, tile.y, "road");
-        } else if (t === "house") {
-          setCell(gridRef.current, tile.x, tile.y, "house");
-        } else if (t === "well") {
-          setCell(gridRef.current, tile.x, tile.y, "well");
+        // Rules:
+        //  - no overwrite (except bulldoze)
+        //  - house requires adjacent road
+        const current = cellTypeAt(gridRef.current, tile.x, tile.y);
+
+        if (t === "bulldoze") {
+          if (current === "empty") return;
+
+          setCell(gridRef.current, tile.x, tile.y, "empty");
+
+          // recompute only if we removed a well (water depends on wells)
+          if (current === "well") {
+            waterPotentialRef.current = computeWellWaterPotential(gridRef.current, 3);
+          }
+
+          setVersion((v) => v + 1);
+          return;
         }
 
-        // MVP: cheap deterministic recompute after any build action.
-        // Later we can optimize to event-based incremental updates.
-        waterPotentialRef.current = computeWellWaterPotential(gridRef.current, 3);
+        if (t === "pan") return;
 
-        setVersion((v) => v + 1);
+        // no overwrite
+        if (current !== "empty") return;
+
+        if (t === "house") {
+          if (!hasAdjacentRoad(gridRef.current, tile.x, tile.y)) return;
+          setCell(gridRef.current, tile.x, tile.y, "house");
+          setVersion((v) => v + 1);
+          return;
+        }
+
+        if (t === "road") {
+          setCell(gridRef.current, tile.x, tile.y, "road");
+          setVersion((v) => v + 1);
+          return;
+        }
+
+        if (t === "well") {
+          setCell(gridRef.current, tile.x, tile.y, "well");
+          waterPotentialRef.current = computeWellWaterPotential(gridRef.current, 3);
+          setVersion((v) => v + 1);
+          return;
+        }
       },
       world.tile
     );
@@ -127,9 +157,11 @@ export function GameCanvas(props: {
         now
       );
 
-      walkersRef.current = stepWalkers(gridRef.current, walkersRef.current, now, waterExpiryRef.current);
+      walkersRef.current = stepWalkers(gridRef.current, walkersRef.current, now, waterExpiryRef.current, {
+        moveEveryMs: 450,
+        waterDurationMs: 12_000,
+      });
 
-      // IMPORTANT: render.ts expects waterPotential BEFORE waterExpiry.
       render(
         ctx,
         w,
@@ -151,7 +183,5 @@ export function GameCanvas(props: {
     return () => cancelAnimationFrame(raf);
   }, [w, h, world, version]);
 
-  return (
-    <canvas ref={canvasRef} style={{ display: "block", width: "100vw", height: "100vh", touchAction: "none" }} />
-  );
+  return <canvas ref={canvasRef} style={{ display: "block", width: "100vw", height: "100vh", touchAction: "none" }} />;
 }

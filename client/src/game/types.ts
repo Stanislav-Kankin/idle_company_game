@@ -1,4 +1,4 @@
-export type Tool = "pan" | "road" | "house" | "well";
+export type Tool = "pan" | "road" | "house" | "well" | "bulldoze";
 
 export type CellType = "empty" | "road" | "house" | "well";
 
@@ -10,6 +10,28 @@ export type Grid = {
 
 export function idx(x: number, y: number, cols: number) {
   return y * cols + x;
+}
+
+export function getCellValue(grid: Grid, x: number, y: number): number {
+  if (x < 0 || y < 0 || x >= grid.cols || y >= grid.rows) return -1;
+  return grid.cells[idx(x, y, grid.cols)];
+}
+
+export function cellTypeAt(grid: Grid, x: number, y: number): CellType {
+  const v = getCellValue(grid, x, y);
+  if (v === 1) return "road";
+  if (v === 2) return "house";
+  if (v === 3) return "well";
+  return "empty";
+}
+
+export function hasAdjacentRoad(grid: Grid, x: number, y: number): boolean {
+  return (
+    cellTypeAt(grid, x, y - 1) === "road" ||
+    cellTypeAt(grid, x + 1, y) === "road" ||
+    cellTypeAt(grid, x, y + 1) === "road" ||
+    cellTypeAt(grid, x - 1, y) === "road"
+  );
 }
 
 export function setCell(grid: Grid, x: number, y: number, t: CellType) {

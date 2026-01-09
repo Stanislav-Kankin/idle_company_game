@@ -51,11 +51,17 @@ export default function App() {
           <button onClick={() => setTool("well")} style={btnStyle(tool === "well")}>
             Well
           </button>
+          <button onClick={() => setTool("bulldoze")} style={btnStyle(tool === "bulldoze")}>
+            Bulldoze
+          </button>
         </div>
 
-        <div style={{ opacity: 0.78, marginTop: 8 }}>Tap to place • Drag to move • Wheel to zoom</div>
+        <div style={{ opacity: 0.78, marginTop: 8 }}>Tap to build • Drag to move • Wheel to zoom</div>
         <div style={{ opacity: 0.78, marginTop: 4 }}>
-          Tip: place <b>Well</b> next to a road to spawn a water carrier.
+          Rules: <b>no overwrite</b>; <b>House</b> requires adjacent <b>Road</b>.
+        </div>
+        <div style={{ opacity: 0.78, marginTop: 4 }}>
+          Use <b>Bulldoze</b> to remove placed tiles.
         </div>
       </div>
     </div>
