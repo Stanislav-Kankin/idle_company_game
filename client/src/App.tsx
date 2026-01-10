@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { fetchHealth } from "./api/health";
+import { t, useLang } from "./i18n";
 import { GameCanvas } from "./game/canvas/GameCanvas";
 import type { CityStats, HouseInfo, Tool } from "./game/types";
 
@@ -22,9 +23,10 @@ type CameraApi = {
 
 const MINIMAP_SCALE = 2;
 
-const START_MONEY = 1000;
+const START_MONEY = 10000;
 
 export default function App() {
+  const [lang, setLang] = useLang();
   const [status, setStatus] = useState("...");
   const [tool, setTool] = useState<Tool>("road");
 
@@ -60,14 +62,14 @@ export default function App() {
 
   const toolLabel: Record<Tool, string> = useMemo(
     () => ({
-      pan: "Камера",
-      road: "Дорога",
-      house: "Дом",
-      well: "Колодец",
-      market: "Рынок",
-      bulldoze: "Снос",
+      pan: t("tool_pan"),
+      road: t("tool_road"),
+      house: t("tool_house"),
+      well: t("tool_well"),
+      market: t("tool_market"),
+      bulldoze: t("tool_bulldoze"),
     }),
-    []
+    [lang]
   );
 
   useEffect(() => {
@@ -82,8 +84,8 @@ export default function App() {
 
   useEffect(() => {
     if (!toast) return;
-    const t = window.setTimeout(() => setToast(null), 1400);
-    return () => window.clearTimeout(t);
+    const tmr = window.setTimeout(() => setToast(null), 1400);
+    return () => window.clearTimeout(tmr);
   }, [toast]);
 
   // Синхронная проверка + списание (нужно, чтобы click handler мог вернуть true/false сразу)
@@ -92,7 +94,7 @@ export default function App() {
     if (cost === 0) return true;
 
     if (moneyRef.current < cost) {
-      setToast("Недостаточно денег");
+      setToast(t("notEnoughMoney"));
       return false;
     }
 
@@ -174,9 +176,9 @@ export default function App() {
           if (!c) return;
           drawMinimap(c, p, MINIMAP_SCALE);
         }}
-        onHover={(t: { x: number; y: number } | null) => {
-          setHoverTile(t);
-          if (!t) setHoverHouse(null);
+        onHover={(t0: { x: number; y: number } | null) => {
+          setHoverTile(t0);
+          if (!t0) setHoverHouse(null);
         }}
         onHouseHoverInfo={setHoverHouse}
         onHouseSelect={setSelectedHouse}
@@ -203,11 +205,11 @@ export default function App() {
           backdropFilter: "blur(6px)",
         }}
       >
-        <div style={{ fontWeight: 900, letterSpacing: 0.2 }}>Город</div>
+        <div style={{ fontWeight: 900, letterSpacing: 0.2 }}>{t("city")}</div>
 
         <div style={{ display: "flex", gap: 10, alignItems: "center", marginLeft: 8 }}>
-          <HudChip label="💰 Деньги" value={money} />
-          <HudChip label="👥 Население" value={population} />
+          <HudChip label={`💰 ${t("money")}`} value={money} />
+          <HudChip label={`👥 ${t("population")}`} value={population} />
         </div>
 
         <div style={{ marginLeft: "auto", display: "flex", gap: 10, alignItems: "center" }}>
@@ -227,12 +229,21 @@ export default function App() {
             </div>
           ) : null}
 
-          <div style={{ opacity: 0.72, fontSize: 13 }}>
-            API: <b style={{ opacity: 0.95 }}>{status}</b>
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <button onClick={() => setLang("ru")} style={btnStyle(lang === "ru")}>
+              {t("lang_ru")}
+            </button>
+            <button onClick={() => setLang("en")} style={btnStyle(lang === "en")}>
+              {t("lang_en")}
+            </button>
           </div>
 
           <div style={{ opacity: 0.72, fontSize: 13 }}>
-            Инструмент: <b style={{ opacity: 0.95 }}>{toolLabel[tool]}</b>
+            {t("api")}: <b style={{ opacity: 0.95 }}>{status}</b>
+          </div>
+
+          <div style={{ opacity: 0.72, fontSize: 13 }}>
+            {t("tool")}: <b style={{ opacity: 0.95 }}>{toolLabel[tool]}</b>
             {hoverTile ? (
               <span style={{ marginLeft: 8, opacity: 0.8 }}>
                 {hoverTile.x},{hoverTile.y}
@@ -260,7 +271,7 @@ export default function App() {
           userSelect: "none",
         }}
       >
-        <div style={{ fontWeight: 900, marginBottom: 8 }}>Миникарта</div>
+        <div style={{ fontWeight: 900, marginBottom: 8 }}>{t("minimap")}</div>
 
         <div
           style={{
@@ -288,22 +299,20 @@ export default function App() {
           />
         </div>
 
-        <div style={{ opacity: 0.72, fontSize: 12, marginTop: 6, lineHeight: 1.25 }}>
-          Тап/drag по миникарте — переместить камеру
-        </div>
+        <div style={{ opacity: 0.72, fontSize: 12, marginTop: 6, lineHeight: 1.25 }}>{t("minimapHint")}</div>
 
-        <div style={{ fontWeight: 900, marginTop: 12 }}>Строительство</div>
+        <div style={{ fontWeight: 900, marginTop: 12 }}>{t("build")}</div>
 
-        <ToolBtn active={tool === "road"} icon="🛣️" title="Дорога" cost={buildCosts.road} onClick={() => setTool("road")} />
-        <ToolBtn active={tool === "house"} icon="🏠" title="Дом" cost={buildCosts.house} onClick={() => setTool("house")} />
-        <ToolBtn active={tool === "well"} icon="⛲" title="Колодец" cost={buildCosts.well} onClick={() => setTool("well")} />
-        <ToolBtn active={tool === "market"} icon="🏪" title="Рынок" cost={buildCosts.market} onClick={() => setTool("market")} />
-        <ToolBtn active={tool === "bulldoze"} icon="🛠️" title="Снос" cost={buildCosts.bulldoze} onClick={() => setTool("bulldoze")} />
+        <ToolBtn active={tool === "road"} icon="🛣️" title={toolLabel.road} cost={buildCosts.road} onClick={() => setTool("road")} />
+        <ToolBtn active={tool === "house"} icon="🏠" title={toolLabel.house} cost={buildCosts.house} onClick={() => setTool("house")} />
+        <ToolBtn active={tool === "well"} icon="⛲" title={toolLabel.well} cost={buildCosts.well} onClick={() => setTool("well")} />
+        <ToolBtn active={tool === "market"} icon="🏪" title={toolLabel.market} cost={buildCosts.market} onClick={() => setTool("market")} />
+        <ToolBtn active={tool === "bulldoze"} icon="🛠️" title={toolLabel.bulldoze} cost={buildCosts.bulldoze} onClick={() => setTool("bulldoze")} />
 
         <div style={{ opacity: 0.75, fontSize: 12, marginTop: 10, lineHeight: 1.35 }}>
-          <div>• Тап/клик — действие</div>
-          <div>• Перетаскивание — камера</div>
-          <div>• Колёсико — зум</div>
+          <div>{t("tipTap")}</div>
+          <div>{t("tipDrag")}</div>
+          <div>{t("tipZoom")}</div>
         </div>
       </div>
 
@@ -326,17 +335,17 @@ export default function App() {
           }}
         >
           <div style={{ fontWeight: 900 }}>
-            Дом L{hoverHouse.level} • 👥 {hoverHouse.population}
+            {t("house")} L{hoverHouse.level} • 👥 {hoverHouse.population}
           </div>
           <div style={{ opacity: 0.9, marginTop: 6, fontSize: 13 }}>
-            Дорога рядом: <b>{hoverHouse.hasRoadAdj ? "да" : "нет"}</b>
+            {t("roadAdj")}: <b>{hoverHouse.hasRoadAdj ? t("yes") : t("no")}</b>
           </div>
           <div style={{ opacity: 0.9, marginTop: 2, fontSize: 13 }}>
-            Вода (потенциал): <b>{hoverHouse.hasWaterPotential ? "да" : "нет"}</b>
+            {t("waterPotential")}: <b>{hoverHouse.hasWaterPotential ? t("yes") : t("no")}</b>
           </div>
           <div style={{ opacity: 0.9, marginTop: 2, fontSize: 13 }}>
-            Обслужено: вода <b>{hoverHouse.waterServed ? "да" : "нет"}</b> • еда{" "}
-            <b>{hoverHouse.foodServed ? "да" : "нет"}</b>
+            {t("served")}: {t("water")} <b>{hoverHouse.waterServed ? t("yes") : t("no")}</b> • {t("food")}{" "}
+            <b>{hoverHouse.foodServed ? t("yes") : t("no")}</b>
           </div>
         </div>
       ) : null}
@@ -361,23 +370,23 @@ export default function App() {
         >
           <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
             <div style={{ fontWeight: 900, fontSize: 16 }}>
-              Дом ({selectedHouse.x},{selectedHouse.y}) • L{selectedHouse.level}
+              {t("house")} ({selectedHouse.x},{selectedHouse.y}) • L{selectedHouse.level}
             </div>
             <button onClick={() => setSelectedHouse(null)} style={btnStyle(false)}>
-              Закрыть
+              {t("close")}
             </button>
           </div>
 
           <div style={{ opacity: 0.92, marginTop: 8, fontSize: 14 }}>
-            Население: <b>{selectedHouse.population}</b>
+            {t("residents")}: <b>{selectedHouse.population}</b>
           </div>
           <div style={{ opacity: 0.92, marginTop: 4, fontSize: 14 }}>
-            Дорога рядом: <b>{selectedHouse.hasRoadAdj ? "да" : "нет"}</b> • Вода (потенциал):{" "}
-            <b>{selectedHouse.hasWaterPotential ? "да" : "нет"}</b>
+            {t("roadAdj")}: <b>{selectedHouse.hasRoadAdj ? t("yes") : t("no")}</b> • {t("waterPotential")}:{" "}
+            <b>{selectedHouse.hasWaterPotential ? t("yes") : t("no")}</b>
           </div>
           <div style={{ opacity: 0.92, marginTop: 4, fontSize: 14 }}>
-            Обслужено: вода <b>{selectedHouse.waterServed ? "да" : "нет"}</b> • еда{" "}
-            <b>{selectedHouse.foodServed ? "да" : "нет"}</b>
+            {t("served")}: {t("water")} <b>{selectedHouse.waterServed ? t("yes") : t("no")}</b> • {t("food")}{" "}
+            <b>{selectedHouse.foodServed ? t("yes") : t("no")}</b>
           </div>
         </div>
       ) : null}
