@@ -11,11 +11,11 @@ type MinimapPayload = {
   cols: number;
   rows: number;
   cells: Uint8Array;
+  terrain: Uint8Array;
   tileSize: number;
   cam: { x: number; y: number; zoom: number };
   viewW: number;
   viewH: number;
-  terrain: Uint8Array;
 };
 
 type CameraApi = {
@@ -480,10 +480,10 @@ function drawMinimap(canvas: HTMLCanvasElement, payload: MinimapPayload, scale: 
       const i = y * cols + x;
       const tv = terrain[i] ?? 0;
 
-      if (tv === 2 || tv === 4) ctx.fillStyle = "#0e7490"; // water / fish
-      else if (tv === 1) ctx.fillStyle = "#166534"; // forest
-      else if (tv === 3) ctx.fillStyle = "#334155"; // mountain
-      else ctx.fillStyle = "#0b1220"; // plain
+      if (tv === 2 || tv === 4) ctx.fillStyle = "#0e7490";
+      else if (tv === 1) ctx.fillStyle = "#166534";
+      else if (tv === 3) ctx.fillStyle = "#334155";
+      else ctx.fillStyle = "#0b1220";
 
       ctx.fillRect(x * scale, y * scale, scale, scale);
 
@@ -494,7 +494,7 @@ function drawMinimap(canvas: HTMLCanvasElement, payload: MinimapPayload, scale: 
     }
   }
 
-  // Buildings overlay (smaller rects so terrain stays visible)
+  // Buildings overlay (slightly inset so terrain stays visible)
   // 0 empty, 1 road, 2 house, 3 well, 4 market
   for (let y = 0; y < rows; y++) {
     for (let x = 0; x < cols; x++) {
@@ -515,7 +515,7 @@ function drawMinimap(canvas: HTMLCanvasElement, payload: MinimapPayload, scale: 
     }
   }
 
-  // Camera rect in tile coords
+  // camera rect in tile coords
   const x0 = cam.x / tileSize;
   const y0 = cam.y / tileSize;
   const wTiles = (viewW / Math.max(0.0001, cam.zoom)) / tileSize;

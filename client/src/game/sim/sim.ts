@@ -2,6 +2,7 @@ import type { CityStats, Grid } from "../types";
 
 export const WELL_RADIUS = 3; // fixed
 export const MARKET_RADIUS = 4; // fixed (Manhattan)
+export const WALKER_MOVE_EVERY_MS_DEFAULT = 450; // ms per step (render can smooth using this))
 
 export type WalkerKind = "water" | "food";
 
@@ -24,8 +25,6 @@ export type Walker = {
     homeMarketX?: number;
     homeMarketY?: number;
 };
-
-export const WALKER_MOVE_EVERY_MS_DEFAULT = 450;
 
 const DIRS = [
     { dx: 0, dy: -1 }, // N
@@ -179,7 +178,7 @@ export function stepWalkers(
   services: { waterExpiry: Float64Array; foodExpiry: Float64Array },
   opts?: { moveEveryMs?: number; waterDurationMs?: number; foodDurationMs?: number }
 ): Walker[] {
-  const moveEveryMs = opts?.moveEveryMs ?? 450;
+  const moveEveryMs = opts?.moveEveryMs ?? WALKER_MOVE_EVERY_MS_DEFAULT;
   const waterDurationMs = opts?.waterDurationMs ?? 12_000;
   const foodDurationMs = opts?.foodDurationMs ?? 12_000;
 

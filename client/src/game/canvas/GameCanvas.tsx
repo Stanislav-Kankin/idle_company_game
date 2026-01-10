@@ -16,7 +16,7 @@ import {
   WELL_RADIUS,
   type Walker,
 } from "../sim/sim";
-import { TERRAIN, generateTerrain, isTerrainBlockedForBuilding } from "../map/terrain";
+import { generateTerrain, isTerrainBlockedForBuilding, TERRAIN } from "../map/terrain";
 
 type MinimapPayload = {
   cols: number;
@@ -52,10 +52,11 @@ export function GameCanvas(props: {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const { w, h } = useCanvasSize();
 
-  const world: WorldConfig = useMemo(() => ({ tile: 32, cols: 80, rows: 60 }), []);
+  // Bigger map (~1.5x): 80x60 -> 120x90
+  const world: WorldConfig = useMemo(() => ({ tile: 32, cols: 120, rows: 90 }), []);
 
-  // Terrain (procedural, deterministic). Stored separately from buildings.
-  const seedRef = useRef<number>(1337);
+  // New terrain each reload: seed generated on mount.
+  const seedRef = useRef<number>(((Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0) || 1);
   const terrainRef = useRef<Uint8Array>(generateTerrain(world.cols, world.rows, seedRef.current));
 
   const gridRef = useRef<Grid>({
@@ -159,6 +160,12 @@ export function GameCanvas(props: {
     return { x, y, level, population, hasRoadAdj, hasWaterPotential, waterServed, foodServed };
   }
 
+  function isBlockedByTerrain(x: number, y: number): boolean {
+    const i = y * gridRef.current.cols + x;
+    const tv = terrainRef.current[i] ?? TERRAIN.Plain;
+    return isTerrainBlockedForBuilding(tv);
+  }
+
   // Input + placement rules (economy included)
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -182,14 +189,7 @@ export function GameCanvas(props: {
         const t = toolRef.current;
         const current = cellTypeAt(gridRef.current, tile.x, tile.y);
 
-        // Terrain placement rules (Iteration B): block building on water/mountains/fish spots.
-        if (t !== "bulldoze" && t !== "pan") {
-          const ti = tile.y * gridRef.current.cols + tile.x;
-          const tv = terrainRef.current[ti] ?? TERRAIN.Plain;
-          if (isTerrainBlockedForBuilding(tv)) return;
-        }
-
-        // tap existing house -> open inspector (unless bulldoze)
+        // Tap existing house -> open inspector (unless bulldoze)
         if (current === "house" && t !== "bulldoze") {
           const info = getHouseInfoAt(tile.x, tile.y, performance.now());
           onHouseSelectRef.current?.(info);
@@ -217,6 +217,9 @@ export function GameCanvas(props: {
 
         if (t === "pan") return;
         if (current !== "empty") return; // no overwrite
+
+        // Terrain restriction: block building on water/mountains/fish spots
+        if (isBlockedByTerrain(tile.x, tile.y)) return;
 
         if (t === "house") {
           if (!hasAdjacentRoad(gridRef.current, tile.x, tile.y)) return;
@@ -329,7 +332,6 @@ export function GameCanvas(props: {
         });
       }
 
-      // render (IMPORTANT: order matches render.ts signature)
       render(
         ctx,
         w,

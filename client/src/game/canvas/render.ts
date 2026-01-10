@@ -31,30 +31,90 @@ function isMarket(grid: Grid, x: number, y: number) {
   return cellAt(grid, x, y) === 4;
 }
 
+function clamp01(v: number): number {
+  return v < 0 ? 0 : v > 1 ? 1 : v;
+}
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+function drawTerrainTile(ctx: CanvasRenderingContext2D, x: number, y: number, tile: number, tv: number) {
+  const px = x * tile;
+  const py = y * tile;
+
+  // pseudo-2D: top face + tiny shadow edge
+  if (tv === TERRAIN.Water || tv === TERRAIN.FishSpot) {
+    ctx.fillStyle = "rgba(14, 116, 144, 0.38)";
+    ctx.fillRect(px, py, tile, tile);
+
+    ctx.fillStyle = "rgba(3, 105, 161, 0.18)";
+    ctx.fillRect(px, py + tile - 3, tile, 3);
+
+    if (tv === TERRAIN.FishSpot) {
+      ctx.fillStyle = "rgba(253, 224, 71, 0.95)";
+      ctx.fillRect(px + tile * 0.7, py + tile * 0.25, 4, 4);
+    }
+    return;
+  }
+
+  if (tv === TERRAIN.Forest) {
+    ctx.fillStyle = "rgba(22, 163, 74, 0.12)";
+    ctx.fillRect(px, py, tile, tile);
+
+    // tiny tree blobs
+    ctx.fillStyle = "rgba(34, 197, 94, 0.25)";
+    ctx.fillRect(px + 6, py + 8, 4, 4);
+    ctx.fillRect(px + tile - 12, py + 6, 3, 3);
+    ctx.fillRect(px + tile - 10, py + tile - 12, 4, 4);
+    return;
+  }
+
+  if (tv === TERRAIN.Mountain) {
+    ctx.fillStyle = "rgba(148, 163, 184, 0.14)";
+    ctx.fillRect(px, py, tile, tile);
+
+    ctx.fillStyle = "rgba(148, 163, 184, 0.22)";
+    ctx.beginPath();
+    ctx.moveTo(px + 6, py + tile - 6);
+    ctx.lineTo(px + tile / 2, py + 8);
+    ctx.lineTo(px + tile - 6, py + tile - 6);
+    ctx.closePath();
+    ctx.fill();
+    return;
+  }
+
+  // plain: keep dark base (already filled globally)
+}
+
 function drawRoad(ctx: CanvasRenderingContext2D, x: number, y: number, tile: number, grid: Grid) {
   const px = x * tile;
   const py = y * tile;
 
-  ctx.fillStyle = "rgba(148, 163, 184, 0.9)";
-  ctx.fillRect(px + 8, py + 8, tile - 16, tile - 16);
+  const n = isRoad(grid, x, y - 1);
+  const e = isRoad(grid, x + 1, y);
+  const s = isRoad(grid, x, y + 1);
+  const w = isRoad(grid, x - 1, y);
 
-  ctx.fillStyle = "rgba(148, 163, 184, 0.9)";
-  if (isRoad(grid, x, y - 1)) ctx.fillRect(px + tile / 2 - 4, py, 8, tile / 2);
-  if (isRoad(grid, x + 1, y)) ctx.fillRect(px + tile / 2, py + tile / 2 - 4, tile / 2, 8);
-  if (isRoad(grid, x, y + 1)) ctx.fillRect(px + tile / 2 - 4, py + tile / 2, 8, tile / 2);
-  if (isRoad(grid, x - 1, y)) ctx.fillRect(px, py + tile / 2 - 4, tile / 2, 8);
-}
+  // base shadow
+  ctx.fillStyle = "rgba(0,0,0,0.18)";
+  ctx.fillRect(px + 3, py + 6, tile - 6, tile - 10);
 
-function drawMarket(ctx: CanvasRenderingContext2D, x: number, y: number, tile: number) {
-  const px = x * tile;
-  const py = y * tile;
+  const thickness = Math.max(8, Math.floor(tile * 0.34));
+  const half = Math.floor((tile - thickness) / 2);
 
-  ctx.fillStyle = "rgba(234, 179, 8, 0.9)";
-  ctx.fillRect(px + 5, py + 8, tile - 10, tile - 14);
+  // top slab
+  ctx.fillStyle = "rgba(148, 163, 184, 0.92)";
+  ctx.fillRect(px + half, py + half, thickness, thickness);
+  if (n) ctx.fillRect(px + half, py, thickness, half + 1);
+  if (s) ctx.fillRect(px + half, py + half + thickness - 1, thickness, half + 1);
+  if (w) ctx.fillRect(px, py + half, half + 1, thickness);
+  if (e) ctx.fillRect(px + half + thickness - 1, py + half, half + 1, thickness);
 
-  ctx.strokeStyle = "rgba(250, 204, 21, 0.85)";
-  ctx.lineWidth = 2;
-  ctx.strokeRect(px + 6.5, py + 9.5, tile - 13, tile - 17);
+  // tiny edge/shadow for pseudo-2D
+  ctx.fillStyle = "rgba(30, 41, 59, 0.25)";
+  ctx.fillRect(px + half, py + half + thickness - 2, thickness, 2);
+  ctx.fillRect(px + half + thickness - 2, py + half, 2, thickness);
 }
 
 function drawHouse(
@@ -70,22 +130,49 @@ function drawHouse(
   const px = x * tile;
   const py = y * tile;
 
-  ctx.fillStyle = "rgba(59, 130, 246, 0.86)";
-  if (level === 2) ctx.fillStyle = "rgba(99, 102, 241, 0.86)";
-  if (level >= 3) ctx.fillStyle = "rgba(168, 85, 247, 0.86)";
+  // ground shadow
+  ctx.fillStyle = "rgba(0,0,0,0.22)";
+  ctx.fillRect(px + 5, py + 10, tile - 10, tile - 12);
 
-  ctx.fillRect(px + 6, py + 10, tile - 12, tile - 14);
+  // pseudo-2D building: front wall + side wall + roof top
+  const front =
+    level <= 1 ? "rgba(59, 130, 246, 0.90)" : level === 2 ? "rgba(99, 102, 241, 0.90)" : "rgba(168, 85, 247, 0.90)";
+  const side =
+    level <= 1 ? "rgba(37, 99, 235, 0.92)" : level === 2 ? "rgba(79, 70, 229, 0.92)" : "rgba(147, 51, 234, 0.92)";
+  const roof =
+    level <= 1 ? "rgba(30, 64, 175, 0.92)" : level === 2 ? "rgba(67, 56, 202, 0.92)" : "rgba(107, 33, 168, 0.92)";
 
-  ctx.fillStyle = "rgba(15, 23, 42, 0.55)";
-  ctx.fillRect(px + 6, py + 7, tile - 12, 6);
+  // front wall
+  ctx.fillStyle = front;
+  ctx.fillRect(px + 6, py + 12, tile - 14, tile - 18);
+
+  // side wall
+  ctx.fillStyle = side;
+  ctx.fillRect(px + tile - 12, py + 10, 6, tile - 16);
+
+  // roof (simple trapezoid)
+  ctx.fillStyle = roof;
+  ctx.beginPath();
+  ctx.moveTo(px + 6, py + 12);
+  ctx.lineTo(px + tile - 12, py + 10);
+  ctx.lineTo(px + tile - 6, py + 13);
+  ctx.lineTo(px + 12, py + 15);
+  ctx.closePath();
+  ctx.fill();
+
+  // windows
+  ctx.fillStyle = "rgba(255, 255, 255, 0.70)";
+  const ww = Math.max(4, Math.floor(tile * 0.14));
+  ctx.fillRect(px + 10, py + tile - 16, ww, ww);
+  ctx.fillRect(px + 10 + ww + 4, py + tile - 16, ww, ww);
 
   if (hasWaterPotential) {
-    ctx.fillStyle = "rgba(56, 189, 248, 0.15)";
-    ctx.fillRect(px + 3, py + 3, tile - 6, tile - 6);
+    ctx.fillStyle = "rgba(59, 130, 246, 0.16)";
+    ctx.fillRect(px + 3, py + 7, tile - 6, tile - 10);
   }
 
   if (recentlyWatered) {
-    ctx.strokeStyle = "rgba(56, 189, 248, 0.65)";
+    ctx.strokeStyle = "rgba(34, 211, 238, 0.65)";
     ctx.lineWidth = 2;
     ctx.strokeRect(px + 3.5, py + 7.5, tile - 7, tile - 11);
   }
@@ -95,20 +182,18 @@ function drawHouse(
     ctx.lineWidth = 2;
     ctx.strokeRect(px + 5.5, py + 9.5, tile - 11, tile - 15);
   }
-
-  if (!recentlyWatered && !recentlyFed) {
-    ctx.strokeStyle = "rgba(15, 23, 42, 0.55)";
-    ctx.lineWidth = 2;
-    ctx.strokeRect(px + 4.5, py + 8.5, tile - 9, tile - 11);
-  }
 }
 
 function drawWell(ctx: CanvasRenderingContext2D, x: number, y: number, tile: number) {
   const px = x * tile;
   const py = y * tile;
 
-  ctx.fillStyle = "rgba(148, 163, 184, 0.7)";
-  ctx.fillRect(px + 6, py + 10, tile - 12, tile - 14);
+  // base
+  ctx.fillStyle = "rgba(0,0,0,0.20)";
+  ctx.fillRect(px + 6, py + 12, tile - 12, tile - 16);
+
+  ctx.fillStyle = "rgba(148, 163, 184, 0.72)";
+  ctx.fillRect(px + 7, py + 12, tile - 14, tile - 18);
 
   const cx = px + tile / 2;
   const cy = py + tile / 2 + 2;
@@ -119,19 +204,35 @@ function drawWell(ctx: CanvasRenderingContext2D, x: number, y: number, tile: num
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.strokeStyle = "rgba(125, 211, 252, 0.65)";
+  ctx.strokeStyle = "rgba(30, 41, 59, 0.6)";
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.arc(cx, cy, r + 2, 0, Math.PI * 2);
+  ctx.arc(cx, cy, r + 1, 0, Math.PI * 2);
   ctx.stroke();
 }
 
-function clamp01(v: number): number {
-  return v < 0 ? 0 : v > 1 ? 1 : v;
-}
+function drawMarket(ctx: CanvasRenderingContext2D, x: number, y: number, tile: number) {
+  const px = x * tile;
+  const py = y * tile;
 
-function lerp(a: number, b: number, t: number): number {
-  return a + (b - a) * t;
+  ctx.fillStyle = "rgba(0,0,0,0.22)";
+  ctx.fillRect(px + 5, py + 10, tile - 10, tile - 12);
+
+  // body
+  ctx.fillStyle = "rgba(251, 191, 36, 0.92)";
+  ctx.fillRect(px + 6, py + 12, tile - 14, tile - 18);
+
+  // roof stripe
+  ctx.fillStyle = "rgba(239, 68, 68, 0.90)";
+  ctx.fillRect(px + 6, py + 10, tile - 14, 6);
+
+  // side shade
+  ctx.fillStyle = "rgba(30, 41, 59, 0.20)";
+  ctx.fillRect(px + tile - 12, py + 12, 6, tile - 18);
+
+  ctx.strokeStyle = "rgba(15, 23, 42, 0.55)";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(px + 6.5, py + 10.5, tile - 13, tile - 17);
 }
 
 function drawWalker(ctx: CanvasRenderingContext2D, wk: Walker, tile: number, now: number) {
@@ -148,14 +249,12 @@ function drawWalker(ctx: CanvasRenderingContext2D, wk: Walker, tile: number, now
   ctx.save();
   ctx.translate(cx, cy);
 
-  // "Human" silhouette (simple, no assets yet)
-  const body = wk.kind === "water" ? "rgba(56, 189, 248, 0.95)" : "rgba(34, 197, 94, 0.95)";
-  const shadow = "rgba(0,0,0,0.25)";
+  const body = wk.kind === "water" ? "rgba(34, 211, 238, 0.95)" : "rgba(250, 204, 21, 0.95)";
 
   // shadow
-  ctx.fillStyle = shadow;
+  ctx.fillStyle = "rgba(0,0,0,0.25)";
   ctx.beginPath();
-  ctx.ellipse(0, 6, 5, 2.5, 0, 0, Math.PI * 2);
+  ctx.ellipse(0, 7, 6, 3, 0, 0, Math.PI * 2);
   ctx.fill();
 
   // head
@@ -170,7 +269,7 @@ function drawWalker(ctx: CanvasRenderingContext2D, wk: Walker, tile: number, now
   ctx.lineCap = "round";
   ctx.beginPath();
   ctx.moveTo(0, -1);
-  ctx.lineTo(0, 4);
+  ctx.lineTo(0, 5);
   ctx.stroke();
 
   // arms
@@ -181,20 +280,15 @@ function drawWalker(ctx: CanvasRenderingContext2D, wk: Walker, tile: number, now
 
   // legs
   ctx.beginPath();
-  ctx.moveTo(0, 4);
-  ctx.lineTo(-2.5, 7);
-  ctx.moveTo(0, 4);
-  ctx.lineTo(2.5, 7);
+  ctx.moveTo(0, 5);
+  ctx.lineTo(-2.5, 8);
+  ctx.moveTo(0, 5);
+  ctx.lineTo(2.5, 8);
   ctx.stroke();
 
-  // tiny prop (bucket/basket)
-  if (wk.kind === "water") {
-    ctx.fillStyle = "rgba(125, 211, 252, 0.85)";
-    ctx.fillRect(3, 2, 3, 3);
-  } else {
-    ctx.fillStyle = "rgba(250, 204, 21, 0.85)";
-    ctx.fillRect(3, 2, 3, 3);
-  }
+  // prop (bucket/basket)
+  ctx.fillStyle = wk.kind === "water" ? "rgba(125, 211, 252, 0.85)" : "rgba(34, 197, 94, 0.85)";
+  ctx.fillRect(3, 2, 3, 3);
 
   ctx.restore();
 }
@@ -239,39 +333,23 @@ export function render(
   const xEnd = Math.min(world.cols, Math.ceil(viewX1 / world.tile));
   const yEnd = Math.min(world.rows, Math.ceil(viewY1 / world.tile));
 
-  // Terrain base (Iteration B): water/forest/mountain + fish spots.
+  // Terrain layer
   for (let y = yStart; y < yEnd; y++) {
     for (let x = xStart; x < xEnd; x++) {
       const i = y * grid.cols + x;
       const tv = terrain[i] ?? TERRAIN.Plain;
-
-      if (tv === TERRAIN.Water || tv === TERRAIN.FishSpot) {
-        ctx.fillStyle = "rgba(14, 116, 144, 0.35)";
-        ctx.fillRect(x * world.tile, y * world.tile, world.tile, world.tile);
-
-        if (tv === TERRAIN.FishSpot) {
-          ctx.fillStyle = "rgba(253, 224, 71, 0.95)";
-          ctx.fillRect(x * world.tile + world.tile * 0.72, y * world.tile + world.tile * 0.28, 3, 3);
-        }
-      } else if (tv === TERRAIN.Forest) {
-        ctx.fillStyle = "rgba(34, 197, 94, 0.14)";
-        ctx.fillRect(x * world.tile, y * world.tile, world.tile, world.tile);
-      } else if (tv === TERRAIN.Mountain) {
-        ctx.fillStyle = "rgba(148, 163, 184, 0.16)";
-        ctx.fillRect(x * world.tile, y * world.tile, world.tile, world.tile);
-
-        ctx.fillStyle = "rgba(148, 163, 184, 0.28)";
-        ctx.fillRect(x * world.tile + 6, y * world.tile + 10, world.tile - 12, 4);
-      }
+      drawTerrainTile(ctx, x, y, world.tile, tv);
     }
   }
 
+  // Roads
   for (let y = yStart; y < yEnd; y++) {
     for (let x = xStart; x < xEnd; x++) {
       if (isRoad(grid, x, y)) drawRoad(ctx, x, y, world.tile, grid);
     }
   }
 
+  // Buildings
   for (let y = yStart; y < yEnd; y++) {
     for (let x = xStart; x < xEnd; x++) {
       if (isWell(grid, x, y)) drawWell(ctx, x, y, world.tile);
@@ -284,12 +362,14 @@ export function render(
     }
   }
 
+  // Walkers
   for (const wk of walkers) {
     if (wk.x < xStart - 1 || wk.x > xEnd + 1 || wk.y < yStart - 1 || wk.y > yEnd + 1) continue;
     drawWalker(ctx, wk, world.tile, now);
   }
 
-  ctx.strokeStyle = "rgba(148, 163, 184, 0.12)";
+  // Grid lines
+  ctx.strokeStyle = "rgba(148, 163, 184, 0.16)";
   ctx.lineWidth = 1;
 
   for (let x = xStart; x <= xEnd; x++) {
@@ -298,7 +378,6 @@ export function render(
     ctx.lineTo(x * world.tile, yEnd * world.tile);
     ctx.stroke();
   }
-
   for (let y = yStart; y <= yEnd; y++) {
     ctx.beginPath();
     ctx.moveTo(xStart * world.tile, y * world.tile);
@@ -306,6 +385,7 @@ export function render(
     ctx.stroke();
   }
 
+  // Hover
   if (hover && hover.x >= 0 && hover.y >= 0 && hover.x < world.cols && hover.y < world.rows) {
     ctx.fillStyle = "rgba(250, 204, 21, 0.14)";
     ctx.fillRect(hover.x * world.tile, hover.y * world.tile, world.tile, world.tile);
