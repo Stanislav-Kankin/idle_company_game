@@ -1,7 +1,7 @@
 import type { Camera } from "./camera";
 import type { Grid } from "../types";
 import { WALKER_MOVE_EVERY_MS_DEFAULT, type Walker } from "../sim/sim";
-import type { SpriteSet } from "../sprites/types";
+import type { SpriteEntry, SpriteFrame, SpriteSet } from "../sprites/types";
 import { TERRAIN } from "../map/terrain";
 
 export type WorldConfig = {
@@ -32,21 +32,28 @@ function isMarket(grid: Grid, x: number, y: number) {
   return cellAt(grid, x, y) === 4;
 }
 
-function drawSpriteAtTileBottom(
+function getSpriteFrame(sp: SpriteEntry, now: number): SpriteFrame {
+  if (!sp.frameMs || sp.frames.length <= 1) return sp.frames[0]!;
+  const idx = Math.floor(now / sp.frameMs) % sp.frames.length;
+  return sp.frames[idx]!;
+}
+
+function drawSpriteAnchored(ctx: CanvasRenderingContext2D, sp: SpriteEntry, ax: number, ay: number, now: number) {
+  const fr = getSpriteFrame(sp, now);
+  ctx.drawImage(fr.img, ax - sp.pivotX, ay - sp.pivotY);
+}
+
+function drawSpriteAtTileBottomCenter(
   ctx: CanvasRenderingContext2D,
-  sprite: { img: CanvasImageSource; w: number; h: number },
+  sp: SpriteEntry,
   x: number,
   y: number,
-  tile: number
+  tile: number,
+  now: number
 ) {
-  const px = x * tile;
-  const py = y * tile;
-
-  // Align sprite bottom to tile bottom, centered horizontally.
-  const dx = px + (tile - sprite.w) / 2;
-  const dy = py + tile - sprite.h;
-
-  ctx.drawImage(sprite.img, dx, dy);
+  const ax = x * tile + tile / 2;
+  const ay = y * tile + tile;
+  drawSpriteAnchored(ctx, sp, ax, ay, now);
 }
 
 function getHouseSpriteId(level: number) {
@@ -120,23 +127,35 @@ function drawRoad(ctx: CanvasRenderingContext2D, x: number, y: number, tile: num
   const s = isRoad(grid, x, y + 1);
   const w = isRoad(grid, x - 1, y);
 
-  // base shadow
-  ctx.fillStyle = "rgba(0,0,0,0.18)";
-  ctx.fillRect(px + 3, py + 6, tile - 6, tile - 10);
-
-  const thickness = Math.max(8, Math.floor(tile * 0.34));
+  // IMPORTANT: no per-tile "shadow block".
+  // We draw the connected road shape twice (shadow + top), so the strip looks continuous.
+  const thickness = Math.max(10, Math.floor(tile * 0.46));
   const half = Math.floor((tile - thickness) / 2);
 
-  // top slab
-  ctx.fillStyle = "rgba(148, 163, 184, 0.92)";
-  ctx.fillRect(px + half, py + half, thickness, thickness);
-  if (n) ctx.fillRect(px + half, py, thickness, half + 1);
-  if (s) ctx.fillRect(px + half, py + half + thickness - 1, thickness, half + 1);
-  if (w) ctx.fillRect(px, py + half, half + 1, thickness);
-  if (e) ctx.fillRect(px + half + thickness - 1, py + half, half + 1, thickness);
+  const shadowDx = 1;
+  const shadowDy = 2;
 
-  // tiny edge/shadow for pseudo-2D
-  ctx.fillStyle = "rgba(30, 41, 59, 0.25)";
+  const drawShape = (dx: number, dy: number, fill: string) => {
+    ctx.fillStyle = fill;
+
+    // center
+    ctx.fillRect(px + half + dx, py + half + dy, thickness, thickness);
+
+    // connectors (overlap between neighboring tiles => continuous)
+    if (n) ctx.fillRect(px + half + dx, py + dy, thickness, half + 1);
+    if (s) ctx.fillRect(px + half + dx, py + half + thickness - 1 + dy, thickness, half + 1);
+    if (w) ctx.fillRect(px + dx, py + half + dy, half + 1, thickness);
+    if (e) ctx.fillRect(px + half + thickness - 1 + dx, py + half + dy, half + 1, thickness);
+  };
+
+  // shadow under the road shape
+  drawShape(shadowDx, shadowDy, "rgba(0, 0, 0, 0.22)");
+
+  // top surface
+  drawShape(0, 0, "rgba(148, 163, 184, 0.92)");
+
+  // subtle edge/shade for pseudo-2D depth (kept minimal to avoid grid-like seams)
+  ctx.fillStyle = "rgba(30, 41, 59, 0.14)";
   ctx.fillRect(px + half, py + half + thickness - 2, thickness, 2);
   ctx.fillRect(px + half + thickness - 2, py + half, 2, thickness);
 }
@@ -371,9 +390,9 @@ export function render(
   for (let y = yStart; y < yEnd; y++) {
     for (let x = xStart; x < xEnd; x++) {
       if (isRoad(grid, x, y)) {
-        const sp = sprites?.road;
-        if (sp) drawSpriteAtTileBottom(ctx, sp, x, y, world.tile);
-        else drawRoad(ctx, x, y, world.tile, grid);
+        // Roads are auto-tiled procedurally for a continuous look.
+        // (Our current road.png is an icon-like sprite and looks blocky when repeated.)
+        drawRoad(ctx, x, y, world.tile, grid);
       }
     }
   }
@@ -383,11 +402,11 @@ export function render(
     for (let x = xStart; x < xEnd; x++) {
       if (isWell(grid, x, y)) {
         const sp = sprites?.well;
-        if (sp) drawSpriteAtTileBottom(ctx, sp, x, y, world.tile);
+        if (sp) drawSpriteAtTileBottomCenter(ctx, sp, x, y, world.tile, now);
         else drawWell(ctx, x, y, world.tile);
       } else if (isMarket(grid, x, y)) {
         const sp = sprites?.market;
-        if (sp) drawSpriteAtTileBottom(ctx, sp, x, y, world.tile);
+        if (sp) drawSpriteAtTileBottomCenter(ctx, sp, x, y, world.tile, now);
         else drawMarket(ctx, x, y, world.tile);
       } else if (isHouse(grid, x, y)) {
         const i = y * grid.cols + x;
@@ -395,7 +414,7 @@ export function render(
         const sid = getHouseSpriteId(level);
         const sp = sprites?.[sid];
         if (sp) {
-          drawSpriteAtTileBottom(ctx, sp, x, y, world.tile);
+          drawSpriteAtTileBottomCenter(ctx, sp, x, y, world.tile, now);
           // overlays for service status
           const px = x * world.tile;
           const py = y * world.tile;
@@ -429,12 +448,18 @@ export function render(
       const tt = clamp01((now - startAt) / WALKER_MOVE_EVERY_MS_DEFAULT);
       const fx = lerp(wk.prevX, wk.x, tt);
       const fy = lerp(wk.prevY, wk.y, tt);
-      // draw at sub-tile position
-      const px = fx * world.tile;
-      const py = fy * world.tile;
-      const dx = px + (world.tile - sp.w) / 2;
-      const dy = py + world.tile - sp.h;
-      ctx.drawImage(sp.img, dx, dy);
+
+      // anchor near tile bottom so it "stands" on the ground
+      const ax = fx * world.tile + world.tile / 2;
+      const ay = fy * world.tile + world.tile - 2;
+
+      // small shadow
+      ctx.fillStyle = "rgba(0,0,0,0.22)";
+      ctx.beginPath();
+      ctx.ellipse(ax, ay - 1, 6, 3, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      drawSpriteAnchored(ctx, sp, ax, ay, now);
     } else {
       drawWalker(ctx, wk, world.tile, now);
     }

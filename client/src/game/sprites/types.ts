@@ -8,10 +8,23 @@ export type SpriteId =
   | "walker_water"
   | "walker_food";
 
-export type Sprite = {
+export type SpriteFrame = {
   img: CanvasImageSource;
   w: number;
   h: number;
 };
 
-export type SpriteSet = Partial<Record<SpriteId, Sprite>>;
+export type SpriteEntry = {
+  frames: SpriteFrame[];
+  /** Frame duration in ms for animated sprites. If omitted, sprite is static. */
+  frameMs?: number;
+
+  /**
+   * Pivot point (in pixels) within the image.
+   * The renderer maps (pivotX, pivotY) to the chosen world anchor.
+   */
+  pivotX: number;
+  pivotY: number;
+};
+
+export type SpriteSet = Partial<Record<SpriteId, SpriteEntry>>;

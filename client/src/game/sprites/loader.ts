@@ -1,5 +1,5 @@
-import { SPRITE_FILES } from "./registry";
-import type { Sprite, SpriteId, SpriteSet } from "./types";
+import { SPRITE_DEFS } from "./registry";
+import type { SpriteEntry, SpriteFrame, SpriteId, SpriteSet } from "./types";
 
 /**
  * Load sprites from `client/src/assets/sprites/` via Vite.
@@ -7,9 +7,6 @@ import type { Sprite, SpriteId, SpriteSet } from "./types";
  * We use import.meta.glob with `?url` so that:
  * - dev server serves correct URLs
  * - build output uses hashed asset filenames for long-term caching
- *
- * Sprites are optional:
- * - if a sprite file is missing, it will be skipped and renderer will use fallback drawings.
  */
 const ALL_SPRITE_URLS = import.meta.glob("../../assets/sprites/**/*.png", {
   eager: true,
@@ -25,7 +22,7 @@ function findUrlByFilename(filename: string): string | null {
   return null;
 }
 
-function loadImage(url: string): Promise<{ img: CanvasImageSource; w: number; h: number }> {
+function loadImage(url: string): Promise<SpriteFrame> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.decoding = "async";
@@ -35,23 +32,40 @@ function loadImage(url: string): Promise<{ img: CanvasImageSource; w: number; h:
   });
 }
 
+async function loadFrames(files: string[]): Promise<SpriteFrame[]> {
+  const frames: SpriteFrame[] = [];
+  for (const filename of files) {
+    const url = findUrlByFilename(filename);
+    if (!url) continue;
+    try {
+      frames.push(await loadImage(url));
+    } catch {
+      // skip
+    }
+  }
+  return frames;
+}
+
 export async function loadSprites(): Promise<SpriteSet> {
   const out: SpriteSet = {};
 
-  const entries = Object.entries(SPRITE_FILES) as Array<[SpriteId, string]>;
-  const jobs = entries.map(async ([id, filename]) => {
-    const url = findUrlByFilename(filename);
-    if (!url) return;
+  const entries = Object.entries(SPRITE_DEFS) as Array<[SpriteId, (typeof SPRITE_DEFS)[SpriteId]]>;
 
-    try {
-      const loaded = await loadImage(url);
-      const sprite: Sprite = loaded;
-      out[id] = sprite;
-    } catch {
-      // skip (fallback render)
-    }
-  });
+  await Promise.all(
+    entries.map(async ([id, def]) => {
+      const frames = await loadFrames(def.files);
+      if (frames.length === 0) return;
 
-  await Promise.all(jobs);
+      const entry: SpriteEntry = {
+        frames,
+        frameMs: def.frameMs,
+        pivotX: def.pivotX,
+        pivotY: def.pivotY,
+      };
+
+      out[id] = entry;
+    })
+  );
+
   return out;
 }
