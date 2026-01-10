@@ -2,7 +2,7 @@ import type { CityStats, Grid } from "../types";
 
 export const WELL_RADIUS = 3; // fixed
 export const MARKET_RADIUS = 4; // fixed (Manhattan)
-export const WALKER_MOVE_EVERY_MS_DEFAULT = 450; // ms per step (render can smooth using this))
+export const WALKER_MOVE_EVERY_MS_DEFAULT = 450; // ms per step (render can smooth using this)
 
 export type WalkerKind = "water" | "food";
 

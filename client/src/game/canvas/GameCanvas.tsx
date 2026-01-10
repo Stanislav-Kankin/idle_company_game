@@ -17,6 +17,8 @@ import {
   type Walker,
 } from "../sim/sim";
 import { generateTerrain, isTerrainBlockedForBuilding, TERRAIN } from "../map/terrain";
+import { loadSprites } from "../sprites/loader";
+import type { SpriteSet } from "../sprites/types";
 
 type MinimapPayload = {
   cols: number;
@@ -59,6 +61,8 @@ export function GameCanvas(props: {
   const seedRef = useRef<number>(((Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0) || 1);
   const terrainRef = useRef<Uint8Array>(generateTerrain(world.cols, world.rows, seedRef.current));
 
+  const spritesRef = useRef<SpriteSet | null>(null);
+
   const gridRef = useRef<Grid>({
     cols: world.cols,
     rows: world.rows,
@@ -96,6 +100,24 @@ export function GameCanvas(props: {
   useEffect(() => void (onMinimapRef.current = props.onMinimap), [props.onMinimap]);
   useEffect(() => void (buildCostsRef.current = props.buildCosts), [props.buildCosts]);
   useEffect(() => void (trySpendRef.current = props.trySpend), [props.trySpend]);
+
+  // Optional sprites (fallback renderer works without them)
+  useEffect(() => {
+    let alive = true;
+
+    loadSprites()
+      .then((set) => {
+        if (!alive) return;
+        spritesRef.current = set;
+      })
+      .catch(() => {
+        // ignore, fallback drawings will be used
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   // Register camera API for minimap control (tap/drag)
   useEffect(() => {
@@ -346,7 +368,8 @@ export function GameCanvas(props: {
         foodExpiryRef.current,
         houseLevelsRef.current,
         now,
-        walkersRef.current
+        walkersRef.current,
+        spritesRef.current
       );
 
       raf = requestAnimationFrame(loop);

@@ -1,6 +1,7 @@
 import type { Camera } from "./camera";
 import type { Grid } from "../types";
 import { WALKER_MOVE_EVERY_MS_DEFAULT, type Walker } from "../sim/sim";
+import type { SpriteSet } from "../sprites/types";
 import { TERRAIN } from "../map/terrain";
 
 export type WorldConfig = {
@@ -29,6 +30,29 @@ function isWell(grid: Grid, x: number, y: number) {
 }
 function isMarket(grid: Grid, x: number, y: number) {
   return cellAt(grid, x, y) === 4;
+}
+
+function drawSpriteAtTileBottom(
+  ctx: CanvasRenderingContext2D,
+  sprite: { img: CanvasImageSource; w: number; h: number },
+  x: number,
+  y: number,
+  tile: number
+) {
+  const px = x * tile;
+  const py = y * tile;
+
+  // Align sprite bottom to tile bottom, centered horizontally.
+  const dx = px + (tile - sprite.w) / 2;
+  const dy = py + tile - sprite.h;
+
+  ctx.drawImage(sprite.img, dx, dy);
+}
+
+function getHouseSpriteId(level: number) {
+  if (level >= 3) return "house_l3" as const;
+  if (level === 2) return "house_l2" as const;
+  return "house_l1" as const;
 }
 
 function clamp01(v: number): number {
@@ -307,7 +331,8 @@ export function render(
   foodExpiry: Float64Array,
   houseLevels: Uint8Array,
   now: number,
-  walkers: Walker[]
+  walkers: Walker[],
+  sprites: SpriteSet | null
 ) {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, w, h);
@@ -345,19 +370,52 @@ export function render(
   // Roads
   for (let y = yStart; y < yEnd; y++) {
     for (let x = xStart; x < xEnd; x++) {
-      if (isRoad(grid, x, y)) drawRoad(ctx, x, y, world.tile, grid);
+      if (isRoad(grid, x, y)) {
+        const sp = sprites?.road;
+        if (sp) drawSpriteAtTileBottom(ctx, sp, x, y, world.tile);
+        else drawRoad(ctx, x, y, world.tile, grid);
+      }
     }
   }
 
   // Buildings
   for (let y = yStart; y < yEnd; y++) {
     for (let x = xStart; x < xEnd; x++) {
-      if (isWell(grid, x, y)) drawWell(ctx, x, y, world.tile);
-      else if (isMarket(grid, x, y)) drawMarket(ctx, x, y, world.tile);
-      else if (isHouse(grid, x, y)) {
+      if (isWell(grid, x, y)) {
+        const sp = sprites?.well;
+        if (sp) drawSpriteAtTileBottom(ctx, sp, x, y, world.tile);
+        else drawWell(ctx, x, y, world.tile);
+      } else if (isMarket(grid, x, y)) {
+        const sp = sprites?.market;
+        if (sp) drawSpriteAtTileBottom(ctx, sp, x, y, world.tile);
+        else drawMarket(ctx, x, y, world.tile);
+      } else if (isHouse(grid, x, y)) {
         const i = y * grid.cols + x;
         const level = houseLevels[i] || 1;
-        drawHouse(ctx, x, y, world.tile, level, waterPotential[i] === 1, waterExpiry[i] > now, foodExpiry[i] > now);
+        const sid = getHouseSpriteId(level);
+        const sp = sprites?.[sid];
+        if (sp) {
+          drawSpriteAtTileBottom(ctx, sp, x, y, world.tile);
+          // overlays for service status
+          const px = x * world.tile;
+          const py = y * world.tile;
+          if (waterPotential[i] === 1) {
+            ctx.fillStyle = "rgba(59, 130, 246, 0.12)";
+            ctx.fillRect(px + 3, py + 7, world.tile - 6, world.tile - 10);
+          }
+          if (waterExpiry[i] > now) {
+            ctx.strokeStyle = "rgba(34, 211, 238, 0.6)";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(px + 4.5, py + 8.5, world.tile - 9, world.tile - 11);
+          }
+          if (foodExpiry[i] > now) {
+            ctx.strokeStyle = "rgba(34, 197, 94, 0.6)";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(px + 6.5, py + 10.5, world.tile - 13, world.tile - 15);
+          }
+        } else {
+          drawHouse(ctx, x, y, world.tile, level, waterPotential[i] === 1, waterExpiry[i] > now, foodExpiry[i] > now);
+        }
       }
     }
   }
@@ -365,7 +423,21 @@ export function render(
   // Walkers
   for (const wk of walkers) {
     if (wk.x < xStart - 1 || wk.x > xEnd + 1 || wk.y < yStart - 1 || wk.y > yEnd + 1) continue;
-    drawWalker(ctx, wk, world.tile, now);
+    const sp = wk.kind === "water" ? sprites?.walker_water : sprites?.walker_food;
+    if (sp) {
+      const startAt = wk.nextMoveAt - WALKER_MOVE_EVERY_MS_DEFAULT;
+      const tt = clamp01((now - startAt) / WALKER_MOVE_EVERY_MS_DEFAULT);
+      const fx = lerp(wk.prevX, wk.x, tt);
+      const fy = lerp(wk.prevY, wk.y, tt);
+      // draw at sub-tile position
+      const px = fx * world.tile;
+      const py = fy * world.tile;
+      const dx = px + (world.tile - sp.w) / 2;
+      const dy = py + world.tile - sp.h;
+      ctx.drawImage(sp.img, dx, dy);
+    } else {
+      drawWalker(ctx, wk, world.tile, now);
+    }
   }
 
   // Grid lines
