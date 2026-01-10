@@ -32,6 +32,14 @@ function isMarket(grid: Grid, x: number, y: number) {
   return cellAt(grid, x, y) === 4;
 }
 
+function isWarehouse(grid: Grid, x: number, y: number) {
+  return cellAt(grid, x, y) === 5;
+}
+
+function isLumbermill(grid: Grid, x: number, y: number) {
+  return cellAt(grid, x, y) === 6;
+}
+
 function getSpriteFrame(sp: SpriteEntry, now: number): SpriteFrame {
   if (!sp.frameMs || sp.frames.length <= 1) return sp.frames[0]!;
   const idx = Math.floor(now / sp.frameMs) % sp.frames.length;
@@ -278,6 +286,53 @@ function drawMarket(ctx: CanvasRenderingContext2D, x: number, y: number, tile: n
   ctx.strokeRect(px + 6.5, py + 10.5, tile - 13, tile - 17);
 }
 
+function drawWarehouse(ctx: CanvasRenderingContext2D, x: number, y: number, tile: number) {
+  const px = x * tile;
+  const py = y * tile;
+
+  // building base
+  ctx.fillStyle = "rgba(251, 191, 36, 0.9)";
+  ctx.fillRect(px + 6, py + 14, tile - 12, tile - 12);
+
+  // roof
+  ctx.fillStyle = "rgba(245, 158, 11, 0.95)";
+  ctx.beginPath();
+  ctx.moveTo(px + 4, py + 14);
+  ctx.lineTo(px + tile / 2, py + 6);
+  ctx.lineTo(px + tile - 4, py + 14);
+  ctx.closePath();
+  ctx.fill();
+
+  // door
+  ctx.fillStyle = "rgba(30, 41, 59, 0.85)";
+  ctx.fillRect(px + tile / 2 - 4, py + tile - 12, 8, 10);
+}
+
+function drawLumbermill(ctx: CanvasRenderingContext2D, x: number, y: number, tile: number) {
+  const px = x * tile;
+  const py = y * tile;
+
+  ctx.fillStyle = "rgba(34, 197, 94, 0.9)";
+  ctx.fillRect(px + 6, py + 16, tile - 12, tile - 14);
+
+  // roof
+  ctx.fillStyle = "rgba(16, 185, 129, 0.95)";
+  ctx.beginPath();
+  ctx.moveTo(px + 5, py + 16);
+  ctx.lineTo(px + tile / 2, py + 8);
+  ctx.lineTo(px + tile - 5, py + 16);
+  ctx.closePath();
+  ctx.fill();
+
+  // log symbol
+  ctx.strokeStyle = "rgba(15, 23, 42, 0.7)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(px + 10, py + tile - 14);
+  ctx.lineTo(px + tile - 10, py + tile - 14);
+  ctx.stroke();
+}
+
 function drawWalker(ctx: CanvasRenderingContext2D, wk: Walker, tile: number, now: number) {
   // Smooth interpolation between prev -> current using nextMoveAt cadence.
   const startAt = wk.nextMoveAt - WALKER_MOVE_EVERY_MS_DEFAULT;
@@ -408,6 +463,14 @@ export function render(
         const sp = sprites?.market;
         if (sp) drawSpriteAtTileBottomCenter(ctx, sp, x, y, world.tile, now);
         else drawMarket(ctx, x, y, world.tile);
+      } else if (isWarehouse(grid, x, y)) {
+        const sp = sprites?.warehouse;
+        if (sp) drawSpriteAtTileBottomCenter(ctx, sp, x, y, world.tile, now);
+        else drawWarehouse(ctx, x, y, world.tile);
+      } else if (isLumbermill(grid, x, y)) {
+        const sp = sprites?.lumbermill;
+        if (sp) drawSpriteAtTileBottomCenter(ctx, sp, x, y, world.tile, now);
+        else drawLumbermill(ctx, x, y, world.tile);
       } else if (isHouse(grid, x, y)) {
         const i = y * grid.cols + x;
         const level = houseLevels[i] || 1;

@@ -5,6 +5,8 @@ export type SpriteId =
   | "house_l3"
   | "well"
   | "market"
+  | "warehouse"
+  | "lumbermill"
   | "walker_water"
   | "walker_food";
 

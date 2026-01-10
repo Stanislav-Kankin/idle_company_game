@@ -4,7 +4,7 @@ import { render, type WorldConfig } from "./render";
 import { attachInput } from "./input";
 import type { Camera } from "./camera";
 import { clamp } from "./camera";
-import { cellTypeAt, hasAdjacentRoad, type CityStats, type Grid, type HouseInfo, type Tool, setCell } from "../types";
+import { cellTypeAt, hasAdjacentRoad, type CityStats, type EconomyState, type Grid, type HouseInfo, type Tool, setCell } from "../types";
 import {
   computeCityStats,
   computeHousePopulation,
@@ -19,6 +19,8 @@ import {
 import { generateTerrain, isTerrainBlockedForBuilding, TERRAIN } from "../map/terrain";
 import { loadSprites } from "../sprites/loader";
 import type { SpriteSet } from "../sprites/types";
+import type { I18nKey } from "../../i18n";
+import type { I18nKey } from "../../i18n";
 
 type MinimapPayload = {
   cols: number;
@@ -43,6 +45,14 @@ export function GameCanvas(props: {
   onHouseHoverInfo?: (info: HouseInfo | null) => void;
   onHouseSelect?: (info: HouseInfo | null) => void;
   onStats?: (stats: CityStats) => void;
+  onEconomy?: (eco: EconomyState) => void;
+
+  // i18n toast messages (owned by App)
+  notifyKey?: (key: I18nKey) => void;
+  onEconomy?: (economy: EconomyState) => void;
+
+  // UI toast/messages (i18n key lives in UI)
+  notifyKey?: (key: I18nKey) => void;
 
   onMinimap?: (payload: MinimapPayload) => void;
   onCameraApi?: (api: CameraApi) => void;
@@ -78,6 +88,12 @@ export function GameCanvas(props: {
   const houseSatisfiedSinceRef = useRef<Float64Array>(new Float64Array(world.cols * world.rows)); // ms (performance.now)
 
   const walkersRef = useRef<Walker[]>([]);
+
+  // Economy (Iteration C MVP): raw resources; updated by a fixed-step tick.
+  const economyRef = useRef<EconomyState>({ wood: 0, clay: 0, grain: 0, meat: 0, fish: 0 });
+  const ecoCarryMsRef = useRef<number>(0);
+  const lastEcoFrameAtRef = useRef<number | null>(null);
+
   const hoverRef = useRef<{ x: number; y: number } | null>(null);
   const camRef = useRef<Camera>({ x: 0, y: 0, zoom: 1 });
   const camInitializedRef = useRef(false);
@@ -87,6 +103,8 @@ export function GameCanvas(props: {
   const onHouseHoverInfoRef = useRef<typeof props.onHouseHoverInfo>(props.onHouseHoverInfo);
   const onHouseSelectRef = useRef<typeof props.onHouseSelect>(props.onHouseSelect);
   const onStatsRef = useRef<typeof props.onStats>(props.onStats);
+  const onEconomyRef = useRef<typeof props.onEconomy>(props.onEconomy);
+  const notifyKeyRef = useRef<typeof props.notifyKey>(props.notifyKey);
   const onMinimapRef = useRef<typeof props.onMinimap>(props.onMinimap);
 
   const buildCostsRef = useRef<Record<Tool, number>>(props.buildCosts);
@@ -97,6 +115,8 @@ export function GameCanvas(props: {
   useEffect(() => void (onHouseHoverInfoRef.current = props.onHouseHoverInfo), [props.onHouseHoverInfo]);
   useEffect(() => void (onHouseSelectRef.current = props.onHouseSelect), [props.onHouseSelect]);
   useEffect(() => void (onStatsRef.current = props.onStats), [props.onStats]);
+  useEffect(() => void (onEconomyRef.current = props.onEconomy), [props.onEconomy]);
+  useEffect(() => void (notifyKeyRef.current = props.notifyKey), [props.notifyKey]);
   useEffect(() => void (onMinimapRef.current = props.onMinimap), [props.onMinimap]);
   useEffect(() => void (buildCostsRef.current = props.buildCosts), [props.buildCosts]);
   useEffect(() => void (trySpendRef.current = props.trySpend), [props.trySpend]);
@@ -188,6 +208,26 @@ export function GameCanvas(props: {
     return isTerrainBlockedForBuilding(tv);
   }
 
+  function hasAdjacentForest(x: number, y: number): boolean {
+    const cols = gridRef.current.cols;
+    const rows = gridRef.current.rows;
+
+    const neigh = [
+      [x, y - 1],
+      [x + 1, y],
+      [x, y + 1],
+      [x - 1, y],
+    ];
+
+    for (const [nx, ny] of neigh) {
+      if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
+      const i = ny * cols + nx;
+      const tv = terrainRef.current[i] ?? TERRAIN.Plain;
+      if (tv === TERRAIN.Forest) return true;
+    }
+    return false;
+  }
+
   // Input + placement rules (economy included)
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -244,7 +284,10 @@ export function GameCanvas(props: {
         if (isBlockedByTerrain(tile.x, tile.y)) return;
 
         if (t === "house") {
-          if (!hasAdjacentRoad(gridRef.current, tile.x, tile.y)) return;
+          if (!hasAdjacentRoad(gridRef.current, tile.x, tile.y)) {
+            notifyKeyRef.current?.("requiresRoadAdj");
+            return;
+          }
 
           const cost = buildCostsRef.current.house ?? 0;
           if (!trySpendRef.current(cost)) return;
@@ -259,12 +302,46 @@ export function GameCanvas(props: {
         }
 
         if (t === "market") {
-          if (!hasAdjacentRoad(gridRef.current, tile.x, tile.y)) return;
+          if (!hasAdjacentRoad(gridRef.current, tile.x, tile.y)) {
+            notifyKeyRef.current?.("requiresRoadAdj");
+            return;
+          }
 
           const cost = buildCostsRef.current.market ?? 0;
           if (!trySpendRef.current(cost)) return;
 
           setCell(gridRef.current, tile.x, tile.y, "market");
+          return;
+        }
+
+        if (t === "warehouse") {
+          if (!hasAdjacentRoad(gridRef.current, tile.x, tile.y)) {
+            notifyKeyRef.current?.("requiresRoadAdj");
+            return;
+          }
+
+          const cost = buildCostsRef.current.warehouse ?? 0;
+          if (!trySpendRef.current(cost)) return;
+
+          setCell(gridRef.current, tile.x, tile.y, "warehouse");
+          return;
+        }
+
+        if (t === "lumbermill") {
+          if (!hasAdjacentRoad(gridRef.current, tile.x, tile.y)) {
+            notifyKeyRef.current?.("requiresRoadAdj");
+            return;
+          }
+
+          if (!hasAdjacentForest(tile.x, tile.y)) {
+            notifyKeyRef.current?.("requiresForestAdj");
+            return;
+          }
+
+          const cost = buildCostsRef.current.lumbermill ?? 0;
+          if (!trySpendRef.current(cost)) return;
+
+          setCell(gridRef.current, tile.x, tile.y, "lumbermill");
           return;
         }
 
@@ -305,9 +382,41 @@ export function GameCanvas(props: {
     let raf = 0;
     let lastStatsAt = 0;
     let lastMinimapAt = 0;
+    let lastEconomyPushAt = 0;
 
     const loop = () => {
       const now = performance.now();
+
+      // Economy fixed-step: 1s ticks for deterministic-ish behavior.
+      if (lastEcoFrameAtRef.current === null) lastEcoFrameAtRef.current = now;
+      const ecoDt = now - (lastEcoFrameAtRef.current ?? now);
+      lastEcoFrameAtRef.current = now;
+      ecoCarryMsRef.current += ecoDt;
+
+      while (ecoCarryMsRef.current >= 1000) {
+        ecoCarryMsRef.current -= 1000;
+
+        // If there is no warehouse, production is effectively wasted (MVP rule).
+        let hasWarehouse = false;
+        const cells = gridRef.current.cells;
+        for (let i = 0; i < cells.length; i++) {
+          if (cells[i] === 5) {
+            hasWarehouse = true;
+            break;
+          }
+        }
+
+        if (hasWarehouse) {
+          const cols = gridRef.current.cols;
+          for (let i = 0; i < cells.length; i++) {
+            if (cells[i] !== 6) continue; // lumbermill
+            const x = i % cols;
+            const y = (i / cols) | 0;
+            if (!hasAdjacentForest(x, y)) continue;
+            economyRef.current.wood += 1;
+          }
+        }
+      }
 
       walkersRef.current = ensureWaterCarriersForHouses(gridRef.current, waterPotentialRef.current, walkersRef.current, now);
       walkersRef.current = ensureMarketLadiesForMarkets(gridRef.current, walkersRef.current, now);
@@ -338,6 +447,11 @@ export function GameCanvas(props: {
           now
         );
         onStatsRef.current(s);
+      }
+
+      if (onEconomyRef.current && now - lastEconomyPushAt >= 500) {
+        lastEconomyPushAt = now;
+        onEconomyRef.current({ ...economyRef.current });
       }
 
       if (onMinimapRef.current && now - lastMinimapAt >= 250) {

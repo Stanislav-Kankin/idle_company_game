@@ -3,7 +3,7 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 import { fetchHealth } from "./api/health";
 import { t, useLang } from "./i18n";
 import { GameCanvas } from "./game/canvas/GameCanvas";
-import type { CityStats, HouseInfo, Tool } from "./game/types";
+import type { CityStats, EconomyState, HouseInfo, Tool } from "./game/types";
 
 type BuildCosts = Record<Tool, number>;
 
@@ -37,6 +37,9 @@ export default function App() {
 
   const [stats, setStats] = useState<CityStats | null>(null);
 
+  // Economy (resources live in sim; money still UI-owned for now)
+  const [economy, setEconomy] = useState<EconomyState>({ wood: 0, clay: 0, grain: 0, meat: 0, fish: 0 });
+
   // Экономика (пока клиентская, позже перенесём на сервер)
   const [money, setMoney] = useState<number>(START_MONEY);
   const moneyRef = useRef<number>(START_MONEY);
@@ -56,6 +59,8 @@ export default function App() {
       house: 100,
       well: 30,
       market: 200,
+      warehouse: 120,
+      lumbermill: 150,
       bulldoze: 30,
     }),
     []
@@ -68,6 +73,8 @@ export default function App() {
       house: t("tool_house"),
       well: t("tool_well"),
       market: t("tool_market"),
+      warehouse: t("tool_warehouse"),
+      lumbermill: t("tool_lumbermill"),
       bulldoze: t("tool_bulldoze"),
     }),
     [lang]
@@ -169,6 +176,8 @@ export default function App() {
         tool={tool}
         buildCosts={buildCosts}
         trySpend={trySpend}
+        notifyKey={(key) => setToast(t(key))}
+        onEconomy={setEconomy}
         onCameraApi={onCameraApi}
         onMinimap={(p: MinimapPayload) => {
           minimapStateRef.current = p;
@@ -211,6 +220,9 @@ export default function App() {
         <div style={{ display: "flex", gap: 10, alignItems: "center", marginLeft: 8 }}>
           <HudChip label={`💰 ${t("money")}`} value={money} />
           <HudChip label={`👥 ${t("population")}`} value={population} />
+
+          <HudChip label={`🪵 ${t("wood")}`} value={economy.wood} />
+          <HudChip label={`🧱 ${t("clay")}`} value={economy.clay} />
         </div>
 
         <div style={{ marginLeft: "auto", display: "flex", gap: 10, alignItems: "center" }}>
@@ -308,6 +320,20 @@ export default function App() {
         <ToolBtn active={tool === "house"} icon="🏠" title={toolLabel.house} cost={buildCosts.house} onClick={() => setTool("house")} />
         <ToolBtn active={tool === "well"} icon="⛲" title={toolLabel.well} cost={buildCosts.well} onClick={() => setTool("well")} />
         <ToolBtn active={tool === "market"} icon="🏪" title={toolLabel.market} cost={buildCosts.market} onClick={() => setTool("market")} />
+        <ToolBtn
+          active={tool === "warehouse"}
+          icon="📦"
+          title={toolLabel.warehouse}
+          cost={buildCosts.warehouse}
+          onClick={() => setTool("warehouse")}
+        />
+        <ToolBtn
+          active={tool === "lumbermill"}
+          icon="🪵"
+          title={toolLabel.lumbermill}
+          cost={buildCosts.lumbermill}
+          onClick={() => setTool("lumbermill")}
+        />
         <ToolBtn active={tool === "bulldoze"} icon="🛠️" title={toolLabel.bulldoze} cost={buildCosts.bulldoze} onClick={() => setTool("bulldoze")} />
 
         <div style={{ opacity: 0.75, fontSize: 12, marginTop: 10, lineHeight: 1.35 }}>
@@ -495,7 +521,7 @@ function drawMinimap(canvas: HTMLCanvasElement, payload: MinimapPayload, scale: 
   }
 
   // Buildings overlay (slightly inset so terrain stays visible)
-  // 0 empty, 1 road, 2 house, 3 well, 4 market
+  // 0 empty, 1 road, 2 house, 3 well, 4 market, 5 warehouse, 6 lumbermill
   for (let y = 0; y < rows; y++) {
     for (let x = 0; x < cols; x++) {
       const v = cells[y * cols + x] ?? 0;
@@ -508,6 +534,8 @@ function drawMinimap(canvas: HTMLCanvasElement, payload: MinimapPayload, scale: 
       else if (v === 2) ctx.fillStyle = "#3b82f6";
       else if (v === 3) ctx.fillStyle = "#22d3ee";
       else if (v === 4) ctx.fillStyle = "#f59e0b";
+      else if (v === 5) ctx.fillStyle = "#fbbf24"; // warehouse
+      else if (v === 6) ctx.fillStyle = "#22c55e"; // lumbermill
       else ctx.fillStyle = "#ffffff";
 
       if (scale <= 1) ctx.fillRect(px, py, scale, scale);

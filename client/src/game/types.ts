@@ -1,11 +1,24 @@
-export type Tool = "pan" | "road" | "house" | "well" | "market" | "bulldoze";
+export type Tool =
+  | "pan"
+  | "road"
+  | "house"
+  | "well"
+  | "market"
+  | "warehouse"
+  | "lumbermill"
+  | "bulldoze";
 
-export type CellType = "empty" | "road" | "house" | "well" | "market";
+export type CellType = "empty" | "road" | "house" | "well" | "market" | "warehouse" | "lumbermill";
+
+// Economy (MVP): raw resources only.
+export type ResourceId = "wood" | "clay" | "grain" | "meat" | "fish";
+
+export type EconomyState = Record<ResourceId, number>;
 
 export type Grid = {
   cols: number;
   rows: number;
-  cells: Uint8Array; // 0 empty, 1 road, 2 house, 3 well, 4 market
+  cells: Uint8Array; // 0 empty, 1 road, 2 house, 3 well, 4 market, 5 warehouse, 6 lumbermill
 };
 
 export type HouseInfo = {
@@ -47,6 +60,8 @@ export function cellTypeAt(grid: Grid, x: number, y: number): CellType {
   if (v === 2) return "house";
   if (v === 3) return "well";
   if (v === 4) return "market";
+  if (v === 5) return "warehouse";
+  if (v === 6) return "lumbermill";
   return "empty";
 }
 
@@ -63,6 +78,19 @@ export function hasAdjacentRoad(grid: Grid, x: number, y: number): boolean {
 export function setCell(grid: Grid, x: number, y: number, t: CellType) {
   if (x < 0 || y < 0 || x >= grid.cols || y >= grid.rows) return;
 
-  const v = t === "road" ? 1 : t === "house" ? 2 : t === "well" ? 3 : t === "market" ? 4 : 0;
+  const v =
+    t === "road"
+      ? 1
+      : t === "house"
+        ? 2
+        : t === "well"
+          ? 3
+          : t === "market"
+            ? 4
+            : t === "warehouse"
+              ? 5
+              : t === "lumbermill"
+                ? 6
+                : 0;
   grid.cells[idx(x, y, grid.cols)] = v;
 }

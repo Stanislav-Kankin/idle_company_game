@@ -43,7 +43,18 @@ const dict = {
     tool_house: "Дом",
     tool_well: "Колодец",
     tool_market: "Рынок",
+    tool_warehouse: "Склад",
+    tool_lumbermill: "Лесопилка",
     tool_bulldoze: "Снос",
+
+    wood: "Дерево",
+    clay: "Глина",
+    grain: "Зерно",
+    meat: "Мясо",
+    fish: "Рыба",
+
+    requiresForestAdj: "Нужен лес рядом",
+    requiresRoadAdj: "Нужна дорога рядом",
 
     lang_ru: "RU",
     lang_en: "EN",
@@ -84,7 +95,18 @@ const dict = {
     tool_house: "House",
     tool_well: "Well",
     tool_market: "Market",
+    tool_warehouse: "Warehouse",
+    tool_lumbermill: "Lumbermill",
     tool_bulldoze: "Bulldoze",
+
+    wood: "Wood",
+    clay: "Clay",
+    grain: "Grain",
+    meat: "Meat",
+    fish: "Fish",
+
+    requiresForestAdj: "Needs adjacent forest",
+    requiresRoadAdj: "Needs adjacent road",
 
     lang_ru: "RU",
     lang_en: "EN",
