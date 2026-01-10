@@ -15,6 +15,7 @@ type MinimapPayload = {
   cam: { x: number; y: number; zoom: number };
   viewW: number;
   viewH: number;
+  terrain: Uint8Array;
 };
 
 type CameraApi = {
@@ -459,7 +460,7 @@ function btnStyle(active: boolean): CSSProperties {
 }
 
 function drawMinimap(canvas: HTMLCanvasElement, payload: MinimapPayload, scale: number) {
-  const { cols, rows, cells, tileSize, cam, viewW, viewH } = payload;
+  const { cols, rows, cells, terrain, tileSize, cam, viewW, viewH } = payload;
 
   const w = Math.max(1, cols * scale);
   const h = Math.max(1, rows * scale);
@@ -472,18 +473,49 @@ function drawMinimap(canvas: HTMLCanvasElement, payload: MinimapPayload, scale: 
 
   ctx.clearRect(0, 0, w, h);
 
-  // 0 empty, 1 road, 2 house, 3 well, 4 market
-  const palette = ["#0b1220", "#9ca3af", "#3b82f6", "#22d3ee", "#f59e0b"];
-
+  // Terrain base
+  // 0 plain, 1 forest, 2 water, 3 mountain, 4 fish_spot
   for (let y = 0; y < rows; y++) {
     for (let x = 0; x < cols; x++) {
-      const v = cells[y * cols + x] ?? 0;
-      ctx.fillStyle = palette[v] ?? palette[0];
+      const i = y * cols + x;
+      const tv = terrain[i] ?? 0;
+
+      if (tv === 2 || tv === 4) ctx.fillStyle = "#0e7490"; // water / fish
+      else if (tv === 1) ctx.fillStyle = "#166534"; // forest
+      else if (tv === 3) ctx.fillStyle = "#334155"; // mountain
+      else ctx.fillStyle = "#0b1220"; // plain
+
       ctx.fillRect(x * scale, y * scale, scale, scale);
+
+      if (tv === 4 && scale >= 2) {
+        ctx.fillStyle = "#fde047";
+        ctx.fillRect(x * scale + (scale - 1), y * scale, 1, 1);
+      }
     }
   }
 
-  // camera rect in tile coords
+  // Buildings overlay (smaller rects so terrain stays visible)
+  // 0 empty, 1 road, 2 house, 3 well, 4 market
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const v = cells[y * cols + x] ?? 0;
+      if (v === 0) continue;
+
+      const px = x * scale;
+      const py = y * scale;
+
+      if (v === 1) ctx.fillStyle = "#9ca3af";
+      else if (v === 2) ctx.fillStyle = "#3b82f6";
+      else if (v === 3) ctx.fillStyle = "#22d3ee";
+      else if (v === 4) ctx.fillStyle = "#f59e0b";
+      else ctx.fillStyle = "#ffffff";
+
+      if (scale <= 1) ctx.fillRect(px, py, scale, scale);
+      else ctx.fillRect(px + 1, py + 1, Math.max(1, scale - 2), Math.max(1, scale - 2));
+    }
+  }
+
+  // Camera rect in tile coords
   const x0 = cam.x / tileSize;
   const y0 = cam.y / tileSize;
   const wTiles = (viewW / Math.max(0.0001, cam.zoom)) / tileSize;

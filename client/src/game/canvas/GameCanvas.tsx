@@ -16,6 +16,7 @@ import {
   WELL_RADIUS,
   type Walker,
 } from "../sim/sim";
+import { TERRAIN, generateTerrain, isTerrainBlockedForBuilding } from "../map/terrain";
 
 type MinimapPayload = {
   cols: number;
@@ -25,6 +26,7 @@ type MinimapPayload = {
   cam: Camera;
   viewW: number;
   viewH: number;
+  terrain: Uint8Array;
 };
 
 type CameraApi = {
@@ -51,6 +53,10 @@ export function GameCanvas(props: {
   const { w, h } = useCanvasSize();
 
   const world: WorldConfig = useMemo(() => ({ tile: 32, cols: 80, rows: 60 }), []);
+
+  // Terrain (procedural, deterministic). Stored separately from buildings.
+  const seedRef = useRef<number>(1337);
+  const terrainRef = useRef<Uint8Array>(generateTerrain(world.cols, world.rows, seedRef.current));
 
   const gridRef = useRef<Grid>({
     cols: world.cols,
@@ -158,7 +164,6 @@ export function GameCanvas(props: {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    // initial potential (even if no wells yet)
     waterPotentialRef.current = computeWellWaterPotential(gridRef.current, WELL_RADIUS);
 
     const cleanup = attachInput(
@@ -176,6 +181,13 @@ export function GameCanvas(props: {
       (tile: { x: number; y: number }) => {
         const t = toolRef.current;
         const current = cellTypeAt(gridRef.current, tile.x, tile.y);
+
+        // Terrain placement rules (Iteration B): block building on water/mountains/fish spots.
+        if (t !== "bulldoze" && t !== "pan") {
+          const ti = tile.y * gridRef.current.cols + tile.x;
+          const tv = terrainRef.current[ti] ?? TERRAIN.Plain;
+          if (isTerrainBlockedForBuilding(tv)) return;
+        }
 
         // tap existing house -> open inspector (unless bulldoze)
         if (current === "house" && t !== "bulldoze") {
@@ -262,7 +274,6 @@ export function GameCanvas(props: {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    // render.ts works in CSS pixels, keep canvas same size
     canvas.width = w;
     canvas.height = h;
 
@@ -273,17 +284,14 @@ export function GameCanvas(props: {
     const loop = () => {
       const now = performance.now();
 
-      // ensure & cleanup walkers (NOTE: these functions return the filtered array)
       walkersRef.current = ensureWaterCarriersForHouses(gridRef.current, waterPotentialRef.current, walkersRef.current, now);
       walkersRef.current = ensureMarketLadiesForMarkets(gridRef.current, walkersRef.current, now);
 
-      // step walkers (food/water service)
       walkersRef.current = stepWalkers(gridRef.current, walkersRef.current, now, {
         waterExpiry: waterExpiryRef.current,
         foodExpiry: foodExpiryRef.current,
       });
 
-      // house leveling
       stepHouseEvolution(
         gridRef.current,
         waterPotentialRef.current,
@@ -294,7 +302,6 @@ export function GameCanvas(props: {
         now
       );
 
-      // stats ~2 times/sec
       if (onStatsRef.current && now - lastStatsAt >= 500) {
         lastStatsAt = now;
         const s = computeCityStats(
@@ -308,7 +315,6 @@ export function GameCanvas(props: {
         onStatsRef.current(s);
       }
 
-      // minimap (throttled)
       if (onMinimapRef.current && now - lastMinimapAt >= 250) {
         lastMinimapAt = now;
         onMinimapRef.current({
@@ -319,6 +325,7 @@ export function GameCanvas(props: {
           cam: { ...camRef.current },
           viewW: w,
           viewH: h,
+          terrain: terrainRef.current,
         });
       }
 
@@ -329,6 +336,7 @@ export function GameCanvas(props: {
         h,
         camRef.current,
         world,
+        terrainRef.current,
         gridRef.current,
         hoverRef.current,
         waterPotentialRef.current,

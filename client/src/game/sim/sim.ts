@@ -25,6 +25,8 @@ export type Walker = {
     homeMarketY?: number;
 };
 
+export const WALKER_MOVE_EVERY_MS_DEFAULT = 450;
+
 const DIRS = [
     { dx: 0, dy: -1 }, // N
     { dx: 1, dy: 0 }, // E
@@ -187,6 +189,7 @@ export function stepWalkers(
     const isFood = w.kind === "food";
     const mx = w.homeMarketX;
     const my = w.homeMarketY;
+    const moveEveryMs = opts?.moveEveryMs ?? WALKER_MOVE_EVERY_MS_DEFAULT;
 
     // HARD SAFETY: food-walker must never leave its market radius (even if state gets corrupted)
     if (isFood) {
