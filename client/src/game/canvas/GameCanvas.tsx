@@ -4,7 +4,18 @@ import { render, type WorldConfig } from "./render";
 import { attachInput } from "./input";
 import type { Camera } from "./camera";
 import { clamp } from "./camera";
-import { cellTypeAt, hasAdjacentRoad, type CityStats, type EconomyState, type Grid, type HouseInfo, type Tool, setCell } from "../types";
+import {
+  cellTypeAt,
+  hasAdjacentRoad,
+  type BuildingInfo,
+  type CityStats,
+  type EconomyState,
+  type Grid,
+  type HouseInfo,
+  type MarketSlots,
+  type Tool,
+  setCell,
+} from "../types";
 import {
   computeCityStats,
   computeHousePopulation,
@@ -20,7 +31,13 @@ import { generateTerrain, isTerrainBlockedForBuilding, TERRAIN } from "../map/te
 import { loadSprites } from "../sprites/loader";
 import type { SpriteSet } from "../sprites/types";
 import type { I18nKey } from "../../i18n";
-import type { I18nKey } from "../../i18n";
+
+const WAREHOUSE_CAPACITY = 2000;
+const MARKET_CAPACITY = 50;
+const MARKET_SLOT_MAX = 10;
+
+// per 1 wood (requested): 1 minute
+const LUMBERMILL_WOOD_TIME_MS = 60_000;
 
 type MinimapPayload = {
   cols: number;
@@ -44,12 +61,12 @@ export function GameCanvas(props: {
   // inspector / stats callbacks
   onHouseHoverInfo?: (info: HouseInfo | null) => void;
   onHouseSelect?: (info: HouseInfo | null) => void;
+
+  onBuildingHoverInfo?: (info: BuildingInfo | null) => void;
+  onBuildingSelect?: (info: BuildingInfo | null) => void;
+
   onStats?: (stats: CityStats) => void;
   onEconomy?: (eco: EconomyState) => void;
-
-  // i18n toast messages (owned by App)
-  notifyKey?: (key: I18nKey) => void;
-  onEconomy?: (economy: EconomyState) => void;
 
   // UI toast/messages (i18n key lives in UI)
   notifyKey?: (key: I18nKey) => void;
@@ -94,6 +111,11 @@ export function GameCanvas(props: {
   const ecoCarryMsRef = useRef<number>(0);
   const lastEcoFrameAtRef = useRef<number | null>(null);
 
+  // Building state (Iteration C): per-building stores / timers.
+  const warehousesRef = useRef<Map<number, EconomyState>>(new Map());
+  const marketsRef = useRef<Map<number, MarketSlots>>(new Map());
+  const lumbermillProgressRef = useRef<Map<number, number>>(new Map()); // ms
+
   const hoverRef = useRef<{ x: number; y: number } | null>(null);
   const camRef = useRef<Camera>({ x: 0, y: 0, zoom: 1 });
   const camInitializedRef = useRef(false);
@@ -102,6 +124,8 @@ export function GameCanvas(props: {
   const onHoverRef = useRef<typeof props.onHover>(props.onHover);
   const onHouseHoverInfoRef = useRef<typeof props.onHouseHoverInfo>(props.onHouseHoverInfo);
   const onHouseSelectRef = useRef<typeof props.onHouseSelect>(props.onHouseSelect);
+  const onBuildingHoverInfoRef = useRef<typeof props.onBuildingHoverInfo>(props.onBuildingHoverInfo);
+  const onBuildingSelectRef = useRef<typeof props.onBuildingSelect>(props.onBuildingSelect);
   const onStatsRef = useRef<typeof props.onStats>(props.onStats);
   const onEconomyRef = useRef<typeof props.onEconomy>(props.onEconomy);
   const notifyKeyRef = useRef<typeof props.notifyKey>(props.notifyKey);
@@ -114,6 +138,8 @@ export function GameCanvas(props: {
   useEffect(() => void (onHoverRef.current = props.onHover), [props.onHover]);
   useEffect(() => void (onHouseHoverInfoRef.current = props.onHouseHoverInfo), [props.onHouseHoverInfo]);
   useEffect(() => void (onHouseSelectRef.current = props.onHouseSelect), [props.onHouseSelect]);
+  useEffect(() => void (onBuildingHoverInfoRef.current = props.onBuildingHoverInfo), [props.onBuildingHoverInfo]);
+  useEffect(() => void (onBuildingSelectRef.current = props.onBuildingSelect), [props.onBuildingSelect]);
   useEffect(() => void (onStatsRef.current = props.onStats), [props.onStats]);
   useEffect(() => void (onEconomyRef.current = props.onEconomy), [props.onEconomy]);
   useEffect(() => void (notifyKeyRef.current = props.notifyKey), [props.notifyKey]);
@@ -202,6 +228,113 @@ export function GameCanvas(props: {
     return { x, y, level, population, hasRoadAdj, hasWaterPotential, waterServed, foodServed };
   }
 
+  function emptyEco(): EconomyState {
+    return { wood: 0, clay: 0, grain: 0, meat: 0, fish: 0 };
+  }
+
+  function ecoTotal(e: EconomyState): number {
+    return (e.wood ?? 0) + (e.clay ?? 0) + (e.grain ?? 0) + (e.meat ?? 0) + (e.fish ?? 0);
+  }
+
+  function emptyMarketSlots(): MarketSlots {
+    return { food: 0, furniture: 0, pottery: 0, wine: 0, other: 0 };
+  }
+
+  function syncBuildingStateFromGrid(): void {
+    const cells = gridRef.current.cells;
+
+    // Ensure state exists for present buildings
+    for (let i = 0; i < cells.length; i++) {
+      const v = cells[i];
+      if (v === 5) {
+        if (!warehousesRef.current.has(i)) warehousesRef.current.set(i, emptyEco());
+      } else if (v === 4) {
+        if (!marketsRef.current.has(i)) marketsRef.current.set(i, emptyMarketSlots());
+      } else if (v === 6) {
+        if (!lumbermillProgressRef.current.has(i)) lumbermillProgressRef.current.set(i, 0);
+      }
+    }
+
+    // Prune removed buildings
+    for (const k of Array.from(warehousesRef.current.keys())) {
+      if (cells[k] !== 5) warehousesRef.current.delete(k);
+    }
+    for (const k of Array.from(marketsRef.current.keys())) {
+      if (cells[k] !== 4) marketsRef.current.delete(k);
+    }
+    for (const k of Array.from(lumbermillProgressRef.current.keys())) {
+      if (cells[k] !== 6) lumbermillProgressRef.current.delete(k);
+    }
+  }
+
+  function findNearestWarehouseIndex(x: number, y: number): number | null {
+    let best: number | null = null;
+    let bestDist = Number.POSITIVE_INFINITY;
+    const cols = gridRef.current.cols;
+
+    for (const idx of warehousesRef.current.keys()) {
+      const wx = idx % cols;
+      const wy = (idx / cols) | 0;
+      const d = Math.abs(wx - x) + Math.abs(wy - y);
+      if (d < bestDist) {
+        bestDist = d;
+        best = idx;
+      }
+    }
+    return best;
+  }
+
+  function getBuildingInfoAt(x: number, y: number): BuildingInfo | null {
+    const ct = cellTypeAt(gridRef.current, x, y);
+    if (ct !== "warehouse" && ct !== "market" && ct !== "lumbermill") return null;
+
+    const cols = gridRef.current.cols;
+    const i = y * cols + x;
+
+    // Make inspector robust even if state wasn't initialized yet
+    syncBuildingStateFromGrid();
+
+    if (ct === "warehouse") {
+      const stored = warehousesRef.current.get(i) ?? emptyEco();
+      return {
+        kind: "warehouse",
+        x,
+        y,
+        capacity: WAREHOUSE_CAPACITY,
+        total: ecoTotal(stored),
+        stored: { ...stored },
+      };
+    }
+
+    if (ct === "market") {
+      const slots = marketsRef.current.get(i) ?? emptyMarketSlots();
+      const total = (slots.food ?? 0) + (slots.furniture ?? 0) + (slots.pottery ?? 0) + (slots.wine ?? 0) + (slots.other ?? 0);
+      return {
+        kind: "market",
+        x,
+        y,
+        capacity: MARKET_CAPACITY,
+        total,
+        slotMax: MARKET_SLOT_MAX,
+        slots: { ...slots },
+      };
+    }
+
+    // lumbermill
+    const progressMs = lumbermillProgressRef.current.get(i) ?? 0;
+    const clamped = Math.max(0, Math.min(LUMBERMILL_WOOD_TIME_MS, progressMs));
+    const secondsToNext = Math.ceil(Math.max(0, (LUMBERMILL_WOOD_TIME_MS - clamped) / 1000));
+    return {
+      kind: "lumbermill",
+      x,
+      y,
+      hasForestAdj: hasAdjacentForest(x, y),
+      hasWarehouse: warehousesRef.current.size > 0,
+      progress01: clamped / LUMBERMILL_WOOD_TIME_MS,
+      secondsToNext,
+    };
+  }
+
   function isBlockedByTerrain(x: number, y: number): boolean {
     const i = y * gridRef.current.cols + x;
     const tv = terrainRef.current[i] ?? TERRAIN.Plain;
@@ -244,8 +377,11 @@ export function GameCanvas(props: {
         onHoverRef.current?.(tile);
 
         const now = performance.now();
-        const info = tile ? getHouseInfoAt(tile.x, tile.y, now) : null;
-        onHouseHoverInfoRef.current?.(info);
+        const houseInfo = tile ? getHouseInfoAt(tile.x, tile.y, now) : null;
+        onHouseHoverInfoRef.current?.(houseInfo);
+
+        const buildingInfo = !houseInfo && tile ? getBuildingInfoAt(tile.x, tile.y) : null;
+        onBuildingHoverInfoRef.current?.(buildingInfo);
       },
       (tile: { x: number; y: number }) => {
         const t = toolRef.current;
@@ -255,6 +391,15 @@ export function GameCanvas(props: {
         if (current === "house" && t !== "bulldoze") {
           const info = getHouseInfoAt(tile.x, tile.y, performance.now());
           onHouseSelectRef.current?.(info);
+          onBuildingSelectRef.current?.(null);
+          return;
+        }
+
+        // Tap other buildings -> open inspector (unless bulldoze)
+        if ((current === "warehouse" || current === "market" || current === "lumbermill") && t !== "bulldoze") {
+          const info = getBuildingInfoAt(tile.x, tile.y);
+          onBuildingSelectRef.current?.(info);
+          onHouseSelectRef.current?.(null);
           return;
         }
 
@@ -264,15 +409,19 @@ export function GameCanvas(props: {
           const cost = buildCostsRef.current.bulldoze ?? 0;
           if (!trySpendRef.current(cost)) return;
 
-          setCell(gridRef.current, tile.x, tile.y, "empty");
-
           const i = tile.y * gridRef.current.cols + tile.x;
+
+          setCell(gridRef.current, tile.x, tile.y, "empty");
           houseLevelsRef.current[i] = 0;
           houseSatisfiedSinceRef.current[i] = 0;
 
           if (current === "well") {
             waterPotentialRef.current = computeWellWaterPotential(gridRef.current, WELL_RADIUS);
           }
+
+          if (current === "warehouse") warehousesRef.current.delete(i);
+          if (current === "market") marketsRef.current.delete(i);
+          if (current === "lumbermill") lumbermillProgressRef.current.delete(i);
 
           return;
         }
@@ -311,6 +460,8 @@ export function GameCanvas(props: {
           if (!trySpendRef.current(cost)) return;
 
           setCell(gridRef.current, tile.x, tile.y, "market");
+          const i = tile.y * gridRef.current.cols + tile.x;
+          marketsRef.current.set(i, emptyMarketSlots());
           return;
         }
 
@@ -324,6 +475,8 @@ export function GameCanvas(props: {
           if (!trySpendRef.current(cost)) return;
 
           setCell(gridRef.current, tile.x, tile.y, "warehouse");
+          const i = tile.y * gridRef.current.cols + tile.x;
+          warehousesRef.current.set(i, emptyEco());
           return;
         }
 
@@ -342,6 +495,8 @@ export function GameCanvas(props: {
           if (!trySpendRef.current(cost)) return;
 
           setCell(gridRef.current, tile.x, tile.y, "lumbermill");
+          const i = tile.y * gridRef.current.cols + tile.x;
+          lumbermillProgressRef.current.set(i, 0);
           return;
         }
 
@@ -396,26 +551,59 @@ export function GameCanvas(props: {
       while (ecoCarryMsRef.current >= 1000) {
         ecoCarryMsRef.current -= 1000;
 
-        // If there is no warehouse, production is effectively wasted (MVP rule).
-        let hasWarehouse = false;
+        // Keep building state maps consistent even if something changes in grid
+        syncBuildingStateFromGrid();
+
         const cells = gridRef.current.cells;
-        for (let i = 0; i < cells.length; i++) {
-          if (cells[i] === 5) {
-            hasWarehouse = true;
-            break;
+        const cols = gridRef.current.cols;
+
+        // Production: Lumbermill -> nearest Warehouse (1 wood per 60s), paused without warehouse/forest or if warehouse is full
+        if (warehousesRef.current.size > 0) {
+          for (let idx = 0; idx < cells.length; idx++) {
+            if (cells[idx] !== 6) continue; // lumbermill
+
+            const x = idx % cols;
+            const y = (idx / cols) | 0;
+
+            if (!hasAdjacentForest(x, y)) continue;
+
+            const nearest = findNearestWarehouseIndex(x, y);
+            if (nearest === null) continue;
+
+            const store = warehousesRef.current.get(nearest) ?? emptyEco();
+            const total = ecoTotal(store);
+            if (total >= WAREHOUSE_CAPACITY) continue; // full
+
+            const prev = lumbermillProgressRef.current.get(idx) ?? 0;
+            let next = prev + 1000;
+
+            if (next >= LUMBERMILL_WOOD_TIME_MS) {
+              const canAdd = WAREHOUSE_CAPACITY - total;
+              const make = Math.min(Math.floor(next / LUMBERMILL_WOOD_TIME_MS), canAdd);
+              if (make > 0) {
+                store.wood += make;
+                warehousesRef.current.set(nearest, store);
+                next -= make * LUMBERMILL_WOOD_TIME_MS;
+              } else {
+                // can't add (warehouse full), pause
+                next = prev;
+              }
+            }
+
+            lumbermillProgressRef.current.set(idx, next);
           }
         }
 
-        if (hasWarehouse) {
-          const cols = gridRef.current.cols;
-          for (let i = 0; i < cells.length; i++) {
-            if (cells[i] !== 6) continue; // lumbermill
-            const x = i % cols;
-            const y = (i / cols) | 0;
-            if (!hasAdjacentForest(x, y)) continue;
-            economyRef.current.wood += 1;
-          }
+        // Update HUD economy as sum of all warehouses
+        const sum = emptyEco();
+        for (const store of warehousesRef.current.values()) {
+          sum.wood += store.wood ?? 0;
+          sum.clay += store.clay ?? 0;
+          sum.grain += store.grain ?? 0;
+          sum.meat += store.meat ?? 0;
+          sum.fish += store.fish ?? 0;
         }
+        economyRef.current = sum;
       }
 
       walkersRef.current = ensureWaterCarriersForHouses(gridRef.current, waterPotentialRef.current, walkersRef.current, now);

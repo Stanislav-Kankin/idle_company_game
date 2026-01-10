@@ -56,6 +56,21 @@ const dict = {
     requiresForestAdj: "Нужен лес рядом",
     requiresRoadAdj: "Нужна дорога рядом",
 
+    capacity: "Ёмкость",
+    stored: "Запасы",
+    total: "Всего",
+    slots: "Ячейки",
+    progress: "Прогресс",
+    secondsToNext: "До следующей единицы",
+    forestAdj: "Лес рядом",
+    warehousePresent: "Склад доступен",
+
+    slot_food: "Еда",
+    slot_furniture: "Мебель",
+    slot_pottery: "Посуда",
+    slot_wine: "Вино",
+    slot_other: "Прочее",
+
     lang_ru: "RU",
     lang_en: "EN",
   },
@@ -107,6 +122,21 @@ const dict = {
 
     requiresForestAdj: "Needs adjacent forest",
     requiresRoadAdj: "Needs adjacent road",
+
+    capacity: "Capacity",
+    stored: "Stored",
+    total: "Total",
+    slots: "Slots",
+    progress: "Progress",
+    secondsToNext: "Time to next unit",
+    forestAdj: "Adjacent forest",
+    warehousePresent: "Warehouse available",
+
+    slot_food: "Food",
+    slot_furniture: "Furniture",
+    slot_pottery: "Pottery",
+    slot_wine: "Wine",
+    slot_other: "Other",
 
     lang_ru: "RU",
     lang_en: "EN",

@@ -3,7 +3,7 @@ import type { PointerEvent as ReactPointerEvent } from "react";
 import { fetchHealth } from "./api/health";
 import { t, useLang } from "./i18n";
 import { GameCanvas } from "./game/canvas/GameCanvas";
-import type { CityStats, EconomyState, HouseInfo, Tool } from "./game/types";
+import type { BuildingInfo, CityStats, EconomyState, HouseInfo, Tool } from "./game/types";
 
 type BuildCosts = Record<Tool, number>;
 
@@ -33,7 +33,9 @@ export default function App() {
 
   const [hoverTile, setHoverTile] = useState<{ x: number; y: number } | null>(null);
   const [hoverHouse, setHoverHouse] = useState<HouseInfo | null>(null);
+  const [hoverBuilding, setHoverBuilding] = useState<BuildingInfo | null>(null);
   const [selectedHouse, setSelectedHouse] = useState<HouseInfo | null>(null);
+  const [selectedBuilding, setSelectedBuilding] = useState<BuildingInfo | null>(null);
 
   const [stats, setStats] = useState<CityStats | null>(null);
 
@@ -188,10 +190,15 @@ export default function App() {
         }}
         onHover={(t0: { x: number; y: number } | null) => {
           setHoverTile(t0);
-          if (!t0) setHoverHouse(null);
+          if (!t0) {
+            setHoverHouse(null);
+            setHoverBuilding(null);
+          }
         }}
         onHouseHoverInfo={setHoverHouse}
         onHouseSelect={setSelectedHouse}
+        onBuildingHoverInfo={setHoverBuilding}
+        onBuildingSelect={setSelectedBuilding}
         onStats={setStats}
       />
 
@@ -377,6 +384,74 @@ export default function App() {
         </div>
       ) : null}
 
+      {/* ХОВЕР-ИНСПЕКТОР (десктоп) - здания */}
+      {!hoverHouse && hoverBuilding ? (
+        <div
+          style={{
+            position: "fixed",
+            left: 12,
+            top: 68,
+            width: 300,
+            background: "rgba(0,0,0,0.60)",
+            color: "white",
+            padding: "10px 12px",
+            borderRadius: 16,
+            fontFamily: "system-ui",
+            zIndex: 44,
+            border: "1px solid rgba(255,255,255,0.14)",
+            backdropFilter: "blur(6px)",
+          }}
+        >
+          {hoverBuilding.kind === "warehouse" ? (
+            <>
+              <div style={{ fontWeight: 900 }}>
+                {t("tool_warehouse")} • ({hoverBuilding.x},{hoverBuilding.y})
+              </div>
+              <div style={{ opacity: 0.9, marginTop: 6, fontSize: 13 }}>
+                {t("total")}: <b>{hoverBuilding.total}</b> / <b>{hoverBuilding.capacity}</b>
+              </div>
+              <div style={{ opacity: 0.9, marginTop: 4, fontSize: 13 }}>
+                🪵 {t("wood")}: <b>{hoverBuilding.stored.wood}</b> • 🧱 {t("clay")}: <b>{hoverBuilding.stored.clay}</b>
+              </div>
+              <div style={{ opacity: 0.9, marginTop: 2, fontSize: 13 }}>
+                🌾 {t("grain")}: <b>{hoverBuilding.stored.grain}</b> • 🥩 {t("meat")}: <b>{hoverBuilding.stored.meat}</b> • 🐟 {t("fish")}: <b>{hoverBuilding.stored.fish}</b>
+              </div>
+            </>
+          ) : null}
+
+          {hoverBuilding.kind === "market" ? (
+            <>
+              <div style={{ fontWeight: 900 }}>
+                {t("tool_market")} • ({hoverBuilding.x},{hoverBuilding.y})
+              </div>
+              <div style={{ opacity: 0.9, marginTop: 6, fontSize: 13 }}>
+                {t("total")}: <b>{hoverBuilding.total}</b> / <b>{hoverBuilding.capacity}</b>
+              </div>
+              <div style={{ opacity: 0.9, marginTop: 4, fontSize: 13 }}>
+                {t("slots")}: {t("slot_food")} <b>{hoverBuilding.slots.food}/{hoverBuilding.slotMax}</b> • {t("slot_furniture")} <b>{hoverBuilding.slots.furniture}/{hoverBuilding.slotMax}</b>
+              </div>
+              <div style={{ opacity: 0.9, marginTop: 2, fontSize: 13 }}>
+                {t("slot_pottery")} <b>{hoverBuilding.slots.pottery}/{hoverBuilding.slotMax}</b> • {t("slot_wine")} <b>{hoverBuilding.slots.wine}/{hoverBuilding.slotMax}</b> • {t("slot_other")} <b>{hoverBuilding.slots.other}/{hoverBuilding.slotMax}</b>
+              </div>
+            </>
+          ) : null}
+
+          {hoverBuilding.kind === "lumbermill" ? (
+            <>
+              <div style={{ fontWeight: 900 }}>
+                {t("tool_lumbermill")} • ({hoverBuilding.x},{hoverBuilding.y})
+              </div>
+              <div style={{ opacity: 0.9, marginTop: 6, fontSize: 13 }}>
+                {t("forestAdj")}: <b>{hoverBuilding.hasForestAdj ? t("yes") : t("no")}</b> • {t("warehousePresent")}: <b>{hoverBuilding.hasWarehouse ? t("yes") : t("no")}</b>
+              </div>
+              <div style={{ opacity: 0.9, marginTop: 2, fontSize: 13 }}>
+                {t("progress")}: <b>{Math.round(hoverBuilding.progress01 * 100)}%</b> • {t("secondsToNext")}: <b>{hoverBuilding.secondsToNext}s</b>
+              </div>
+            </>
+          ) : null}
+        </div>
+      ) : null}
+
       {/* КАРТОЧКА ДОМА (мобилка) */}
       {selectedHouse ? (
         <div
@@ -415,6 +490,101 @@ export default function App() {
             {t("served")}: {t("water")} <b>{selectedHouse.waterServed ? t("yes") : t("no")}</b> • {t("food")}{" "}
             <b>{selectedHouse.foodServed ? t("yes") : t("no")}</b>
           </div>
+        </div>
+      ) : null}
+
+      {/* КАРТОЧКА ЗДАНИЯ (мобилка) */}
+      {selectedBuilding ? (
+        <div
+          style={{
+            position: "fixed",
+            left: 12,
+            right: 12,
+            bottom: 12,
+            background: "rgba(0,0,0,0.78)",
+            color: "white",
+            padding: "12px 12px",
+            borderRadius: 18,
+            fontFamily: "system-ui",
+            zIndex: 60,
+            border: "1px solid rgba(255,255,255,0.16)",
+            backdropFilter: "blur(6px)",
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+            <div style={{ fontWeight: 900, fontSize: 16 }}>
+              {selectedBuilding.kind === "warehouse" ? t("tool_warehouse") : null}
+              {selectedBuilding.kind === "market" ? t("tool_market") : null}
+              {selectedBuilding.kind === "lumbermill" ? t("tool_lumbermill") : null}
+              {" "}({selectedBuilding.x},{selectedBuilding.y})
+            </div>
+            <button onClick={() => setSelectedBuilding(null)} style={btnStyle(false)}>
+              {t("close")}
+            </button>
+          </div>
+
+          {selectedBuilding.kind === "warehouse" ? (
+            <>
+              <div style={{ opacity: 0.92, marginTop: 8, fontSize: 14 }}>
+                {t("total")}: <b>{selectedBuilding.total}</b> / <b>{selectedBuilding.capacity}</b>
+              </div>
+              <div style={{ opacity: 0.92, marginTop: 6, fontSize: 14 }}>
+                🪵 {t("wood")}: <b>{selectedBuilding.stored.wood}</b>
+              </div>
+              <div style={{ opacity: 0.92, marginTop: 4, fontSize: 14 }}>
+                🧱 {t("clay")}: <b>{selectedBuilding.stored.clay}</b>
+              </div>
+              <div style={{ opacity: 0.92, marginTop: 4, fontSize: 14 }}>
+                🌾 {t("grain")}: <b>{selectedBuilding.stored.grain}</b>
+              </div>
+              <div style={{ opacity: 0.92, marginTop: 4, fontSize: 14 }}>
+                🥩 {t("meat")}: <b>{selectedBuilding.stored.meat}</b>
+              </div>
+              <div style={{ opacity: 0.92, marginTop: 4, fontSize: 14 }}>
+                🐟 {t("fish")}: <b>{selectedBuilding.stored.fish}</b>
+              </div>
+            </>
+          ) : null}
+
+          {selectedBuilding.kind === "market" ? (
+            <>
+              <div style={{ opacity: 0.92, marginTop: 8, fontSize: 14 }}>
+                {t("total")}: <b>{selectedBuilding.total}</b> / <b>{selectedBuilding.capacity}</b>
+              </div>
+              <div style={{ opacity: 0.92, marginTop: 6, fontSize: 14 }}>
+                {t("slot_food")}: <b>{selectedBuilding.slots.food}/{selectedBuilding.slotMax}</b>
+              </div>
+              <div style={{ opacity: 0.92, marginTop: 4, fontSize: 14 }}>
+                {t("slot_furniture")}: <b>{selectedBuilding.slots.furniture}/{selectedBuilding.slotMax}</b>
+              </div>
+              <div style={{ opacity: 0.92, marginTop: 4, fontSize: 14 }}>
+                {t("slot_pottery")}: <b>{selectedBuilding.slots.pottery}/{selectedBuilding.slotMax}</b>
+              </div>
+              <div style={{ opacity: 0.92, marginTop: 4, fontSize: 14 }}>
+                {t("slot_wine")}: <b>{selectedBuilding.slots.wine}/{selectedBuilding.slotMax}</b>
+              </div>
+              <div style={{ opacity: 0.92, marginTop: 4, fontSize: 14 }}>
+                {t("slot_other")}: <b>{selectedBuilding.slots.other}/{selectedBuilding.slotMax}</b>
+              </div>
+            </>
+          ) : null}
+
+          {selectedBuilding.kind === "lumbermill" ? (
+            <>
+              <div style={{ opacity: 0.92, marginTop: 8, fontSize: 14 }}>
+                {t("forestAdj")}: <b>{selectedBuilding.hasForestAdj ? t("yes") : t("no")}</b>
+              </div>
+              <div style={{ opacity: 0.92, marginTop: 4, fontSize: 14 }}>
+                {t("warehousePresent")}: <b>{selectedBuilding.hasWarehouse ? t("yes") : t("no")}</b>
+              </div>
+              <div style={{ opacity: 0.92, marginTop: 4, fontSize: 14 }}>
+                {t("progress")}: <b>{Math.round(selectedBuilding.progress01 * 100)}%</b>
+              </div>
+              <div style={{ opacity: 0.92, marginTop: 4, fontSize: 14 }}>
+                {t("secondsToNext")}: <b>{selectedBuilding.secondsToNext}s</b>
+              </div>
+            </>
+          ) : null}
         </div>
       ) : null}
     </div>

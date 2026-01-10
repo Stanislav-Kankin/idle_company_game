@@ -15,6 +15,43 @@ export type ResourceId = "wood" | "clay" | "grain" | "meat" | "fish";
 
 export type EconomyState = Record<ResourceId, number>;
 
+// --- Building inspectors (non-house) ---
+
+export type MarketSlotId = "food" | "furniture" | "pottery" | "wine" | "other";
+
+export type MarketSlots = Record<MarketSlotId, number>;
+
+export type WarehouseInfo = {
+  kind: "warehouse";
+  x: number;
+  y: number;
+  capacity: number;
+  total: number;
+  stored: EconomyState;
+};
+
+export type MarketInfo = {
+  kind: "market";
+  x: number;
+  y: number;
+  capacity: number;
+  total: number;
+  slotMax: number;
+  slots: MarketSlots;
+};
+
+export type LumbermillInfo = {
+  kind: "lumbermill";
+  x: number;
+  y: number;
+  hasForestAdj: boolean;
+  hasWarehouse: boolean;
+  progress01: number; // 0..1
+  secondsToNext: number;
+};
+
+export type BuildingInfo = WarehouseInfo | MarketInfo | LumbermillInfo;
+
 export type Grid = {
   cols: number;
   rows: number;
