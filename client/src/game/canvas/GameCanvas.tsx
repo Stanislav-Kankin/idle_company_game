@@ -39,6 +39,11 @@ const MARKET_SLOT_MAX = 10;
 // per 1 wood (requested): 1 minute
 const LUMBERMILL_WOOD_TIME_MS = 60_000;
 
+// Workforce (Iteration C2)
+const WORKER_RADIUS_TILES = 10;
+const WORKERS_LUMBERMILL = 2;
+const WORKERS_MARKET = 2;
+
 type MinimapPayload = {
   cols: number;
   rows: number;
@@ -115,6 +120,10 @@ export function GameCanvas(props: {
   const warehousesRef = useRef<Map<number, EconomyState>>(new Map());
   const marketsRef = useRef<Map<number, MarketSlots>>(new Map());
   const lumbermillProgressRef = useRef<Map<number, number>>(new Map()); // ms
+
+  // Workforce assignment (recomputed periodically)
+  const workersAssignedRef = useRef<Map<number, number>>(new Map());
+  const workersNearbyRef = useRef<Map<number, number>>(new Map());
 
   const hoverRef = useRef<{ x: number; y: number } | null>(null);
   const camRef = useRef<Camera>({ x: 0, y: 0, zoom: 1 });
@@ -265,6 +274,90 @@ export function GameCanvas(props: {
     for (const k of Array.from(lumbermillProgressRef.current.keys())) {
       if (cells[k] !== 6) lumbermillProgressRef.current.delete(k);
     }
+
+    for (const k of Array.from(workersAssignedRef.current.keys())) {
+      if (cells[k] !== 4 && cells[k] !== 5 && cells[k] !== 6) workersAssignedRef.current.delete(k);
+    }
+    for (const k of Array.from(workersNearbyRef.current.keys())) {
+      if (cells[k] !== 4 && cells[k] !== 5 && cells[k] !== 6) workersNearbyRef.current.delete(k);
+    }
+  }
+
+  function requiredWorkersForCell(v: number): number {
+    if (v === 6) return WORKERS_LUMBERMILL;
+    if (v === 4) return WORKERS_MARKET;
+    return 0;
+  }
+
+  function recomputeWorkforce(now: number): void {
+    // Build house worker pool
+    const cols = gridRef.current.cols;
+    const rows = gridRef.current.rows;
+    const cells = gridRef.current.cells;
+
+    type HousePool = { idx: number; x: number; y: number; total: number; remain: number };
+    const houses: HousePool[] = [];
+
+    for (let i = 0; i < cells.length; i++) {
+      if (cells[i] !== 2) continue; // house
+      const x = i % cols;
+      const y = (i / cols) | 0;
+
+      const level = houseLevelsRef.current[i] || 1;
+      const hasRoadAdj = hasAdjacentRoad(gridRef.current, x, y);
+      const hasWaterPotential = waterPotentialRef.current[i] === 1;
+      const foodServed = foodExpiryRef.current[i] > now;
+
+      const pop = computeHousePopulation(level, hasRoadAdj, hasWaterPotential, foodServed);
+      if (pop <= 0) continue;
+
+      houses.push({ idx: i, x, y, total: pop, remain: pop });
+    }
+
+    // Prepare demands (stable order by cell index)
+    type Demand = { idx: number; x: number; y: number; required: number };
+    const demands: Demand[] = [];
+
+    for (let i = 0; i < cells.length; i++) {
+      const req = requiredWorkersForCell(cells[i] ?? 0);
+      if (req <= 0) continue;
+      const x = i % cols;
+      const y = (i / cols) | 0;
+      demands.push({ idx: i, x, y, required: req });
+    }
+
+    // Reset maps
+    workersAssignedRef.current.clear();
+    workersNearbyRef.current.clear();
+
+    // Greedy assignment: nearest houses first (Manhattan distance), shared pool
+    for (const d of demands) {
+      const candidates: { h: HousePool; dist: number }[] = [];
+      let supply = 0;
+
+      for (const h of houses) {
+        const dx = Math.abs(h.x - d.x);
+        const dy = Math.abs(h.y - d.y);
+        const dist = dx + dy;
+        if (dist > WORKER_RADIUS_TILES) continue;
+        supply += h.total;
+        if (h.remain > 0) candidates.push({ h, dist });
+      }
+
+      candidates.sort((a, b) => (a.dist !== b.dist ? a.dist - b.dist : a.h.idx - b.h.idx));
+
+      let assigned = 0;
+      for (const c of candidates) {
+        if (assigned >= d.required) break;
+        const take = Math.min(c.h.remain, d.required - assigned);
+        if (take <= 0) continue;
+        c.h.remain -= take;
+        assigned += take;
+      }
+
+      workersAssignedRef.current.set(d.idx, assigned);
+      workersNearbyRef.current.set(d.idx, supply);
+    }
   }
 
   function findNearestWarehouseIndex(x: number, y: number): number | null {
@@ -296,10 +389,17 @@ export function GameCanvas(props: {
 
     if (ct === "warehouse") {
       const stored = warehousesRef.current.get(i) ?? emptyEco();
+      const v = gridRef.current.cells[i] ?? 0;
+      const req = requiredWorkersForCell(v);
+      const assigned = workersAssignedRef.current.get(i) ?? 0;
+      const nearby = workersNearbyRef.current.get(i) ?? 0;
       return {
         kind: "warehouse",
         x,
         y,
+        workersRequired: req,
+        workersAssigned: assigned,
+        workersNearby: nearby,
         capacity: WAREHOUSE_CAPACITY,
         total: ecoTotal(stored),
         stored: { ...stored },
@@ -309,10 +409,17 @@ export function GameCanvas(props: {
     if (ct === "market") {
       const slots = marketsRef.current.get(i) ?? emptyMarketSlots();
       const total = (slots.food ?? 0) + (slots.furniture ?? 0) + (slots.pottery ?? 0) + (slots.wine ?? 0) + (slots.other ?? 0);
+      const v = gridRef.current.cells[i] ?? 0;
+      const req = requiredWorkersForCell(v);
+      const assigned = workersAssignedRef.current.get(i) ?? 0;
+      const nearby = workersNearbyRef.current.get(i) ?? 0;
       return {
         kind: "market",
         x,
         y,
+        workersRequired: req,
+        workersAssigned: assigned,
+        workersNearby: nearby,
         capacity: MARKET_CAPACITY,
         total,
         slotMax: MARKET_SLOT_MAX,
@@ -323,11 +430,19 @@ export function GameCanvas(props: {
     // lumbermill
     const progressMs = lumbermillProgressRef.current.get(i) ?? 0;
     const clamped = Math.max(0, Math.min(LUMBERMILL_WOOD_TIME_MS, progressMs));
-    const secondsToNext = Math.ceil(Math.max(0, (LUMBERMILL_WOOD_TIME_MS - clamped) / 1000));
+    const v = gridRef.current.cells[i] ?? 0;
+    const req = requiredWorkersForCell(v);
+    const assigned = workersAssignedRef.current.get(i) ?? 0;
+    const nearby = workersNearbyRef.current.get(i) ?? 0;
+    const k = req > 0 ? Math.min(1, assigned / req) : 1;
+    const secondsToNext = k > 0 ? Math.ceil(Math.max(0, (LUMBERMILL_WOOD_TIME_MS - clamped) / (1000 * k))) : -1;
     return {
       kind: "lumbermill",
       x,
       y,
+      workersRequired: req,
+      workersAssigned: assigned,
+      workersNearby: nearby,
       hasForestAdj: hasAdjacentForest(x, y),
       hasWarehouse: warehousesRef.current.size > 0,
       progress01: clamped / LUMBERMILL_WOOD_TIME_MS,
@@ -554,6 +669,9 @@ export function GameCanvas(props: {
         // Keep building state maps consistent even if something changes in grid
         syncBuildingStateFromGrid();
 
+        // Recompute workforce (shared pool) - affects production speed
+        recomputeWorkforce(now);
+
         const cells = gridRef.current.cells;
         const cols = gridRef.current.cols;
 
@@ -575,7 +693,11 @@ export function GameCanvas(props: {
             if (total >= WAREHOUSE_CAPACITY) continue; // full
 
             const prev = lumbermillProgressRef.current.get(idx) ?? 0;
-            let next = prev + 1000;
+            const assigned = workersAssignedRef.current.get(idx) ?? 0;
+            const k = Math.min(1, assigned / WORKERS_LUMBERMILL);
+            if (k <= 0) continue;
+
+            let next = prev + 1000 * k;
 
             if (next >= LUMBERMILL_WOOD_TIME_MS) {
               const canAdd = WAREHOUSE_CAPACITY - total;

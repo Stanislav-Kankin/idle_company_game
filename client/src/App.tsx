@@ -407,6 +407,11 @@ export default function App() {
               <div style={{ fontWeight: 900 }}>
                 {t("tool_warehouse")} • ({hoverBuilding.x},{hoverBuilding.y})
               </div>
+              {hoverBuilding.workersRequired > 0 ? (
+                <div style={{ opacity: 0.9, marginTop: 6, fontSize: 13 }}>
+                  {t("workers")}: <b>{hoverBuilding.workersAssigned}/{hoverBuilding.workersRequired}</b> • {t("workersNearby")}: <b>{hoverBuilding.workersNearby}</b> • {t("efficiency")}: <b>{Math.round((hoverBuilding.workersAssigned / Math.max(1, hoverBuilding.workersRequired)) * 100)}%</b>
+                </div>
+              ) : null}
               <div style={{ opacity: 0.9, marginTop: 6, fontSize: 13 }}>
                 {t("total")}: <b>{hoverBuilding.total}</b> / <b>{hoverBuilding.capacity}</b>
               </div>
@@ -424,6 +429,11 @@ export default function App() {
               <div style={{ fontWeight: 900 }}>
                 {t("tool_market")} • ({hoverBuilding.x},{hoverBuilding.y})
               </div>
+              {hoverBuilding.workersRequired > 0 ? (
+                <div style={{ opacity: 0.9, marginTop: 6, fontSize: 13 }}>
+                  {t("workers")}: <b>{hoverBuilding.workersAssigned}/{hoverBuilding.workersRequired}</b> • {t("workersNearby")}: <b>{hoverBuilding.workersNearby}</b> • {t("efficiency")}: <b>{Math.round((hoverBuilding.workersAssigned / Math.max(1, hoverBuilding.workersRequired)) * 100)}%</b>
+                </div>
+              ) : null}
               <div style={{ opacity: 0.9, marginTop: 6, fontSize: 13 }}>
                 {t("total")}: <b>{hoverBuilding.total}</b> / <b>{hoverBuilding.capacity}</b>
               </div>
@@ -441,11 +451,16 @@ export default function App() {
               <div style={{ fontWeight: 900 }}>
                 {t("tool_lumbermill")} • ({hoverBuilding.x},{hoverBuilding.y})
               </div>
+              {hoverBuilding.workersRequired > 0 ? (
+                <div style={{ opacity: 0.9, marginTop: 6, fontSize: 13 }}>
+                  {t("workers")}: <b>{hoverBuilding.workersAssigned}/{hoverBuilding.workersRequired}</b> • {t("workersNearby")}: <b>{hoverBuilding.workersNearby}</b> • {t("efficiency")}: <b>{Math.round((hoverBuilding.workersAssigned / Math.max(1, hoverBuilding.workersRequired)) * 100)}%</b>
+                </div>
+              ) : null}
               <div style={{ opacity: 0.9, marginTop: 6, fontSize: 13 }}>
                 {t("forestAdj")}: <b>{hoverBuilding.hasForestAdj ? t("yes") : t("no")}</b> • {t("warehousePresent")}: <b>{hoverBuilding.hasWarehouse ? t("yes") : t("no")}</b>
               </div>
               <div style={{ opacity: 0.9, marginTop: 2, fontSize: 13 }}>
-                {t("progress")}: <b>{Math.round(hoverBuilding.progress01 * 100)}%</b> • {t("secondsToNext")}: <b>{hoverBuilding.secondsToNext}s</b>
+                {t("progress")}: <b>{Math.round(hoverBuilding.progress01 * 100)}%</b> • {t("secondsToNext")}: <b>{hoverBuilding.secondsToNext >= 0 ? `${hoverBuilding.secondsToNext}s` : t("noWorkers")}</b>
               </div>
             </>
           ) : null}
@@ -525,6 +540,11 @@ export default function App() {
 
           {selectedBuilding.kind === "warehouse" ? (
             <>
+              {selectedBuilding.workersRequired > 0 ? (
+                <div style={{ opacity: 0.92, marginTop: 8, fontSize: 14 }}>
+                  {t("workers")}: <b>{selectedBuilding.workersAssigned}/{selectedBuilding.workersRequired}</b> • {t("workersNearby")}: <b>{selectedBuilding.workersNearby}</b> • {t("efficiency")}: <b>{Math.round((selectedBuilding.workersAssigned / Math.max(1, selectedBuilding.workersRequired)) * 100)}%</b>
+                </div>
+              ) : null}
               <div style={{ opacity: 0.92, marginTop: 8, fontSize: 14 }}>
                 {t("total")}: <b>{selectedBuilding.total}</b> / <b>{selectedBuilding.capacity}</b>
               </div>
@@ -548,6 +568,11 @@ export default function App() {
 
           {selectedBuilding.kind === "market" ? (
             <>
+              {selectedBuilding.workersRequired > 0 ? (
+                <div style={{ opacity: 0.92, marginTop: 8, fontSize: 14 }}>
+                  {t("workers")}: <b>{selectedBuilding.workersAssigned}/{selectedBuilding.workersRequired}</b> • {t("workersNearby")}: <b>{selectedBuilding.workersNearby}</b> • {t("efficiency")}: <b>{Math.round((selectedBuilding.workersAssigned / Math.max(1, selectedBuilding.workersRequired)) * 100)}%</b>
+                </div>
+              ) : null}
               <div style={{ opacity: 0.92, marginTop: 8, fontSize: 14 }}>
                 {t("total")}: <b>{selectedBuilding.total}</b> / <b>{selectedBuilding.capacity}</b>
               </div>
@@ -571,6 +596,11 @@ export default function App() {
 
           {selectedBuilding.kind === "lumbermill" ? (
             <>
+              {selectedBuilding.workersRequired > 0 ? (
+                <div style={{ opacity: 0.92, marginTop: 8, fontSize: 14 }}>
+                  {t("workers")}: <b>{selectedBuilding.workersAssigned}/{selectedBuilding.workersRequired}</b> • {t("workersNearby")}: <b>{selectedBuilding.workersNearby}</b> • {t("efficiency")}: <b>{Math.round((selectedBuilding.workersAssigned / Math.max(1, selectedBuilding.workersRequired)) * 100)}%</b>
+                </div>
+              ) : null}
               <div style={{ opacity: 0.92, marginTop: 8, fontSize: 14 }}>
                 {t("forestAdj")}: <b>{selectedBuilding.hasForestAdj ? t("yes") : t("no")}</b>
               </div>
@@ -581,7 +611,7 @@ export default function App() {
                 {t("progress")}: <b>{Math.round(selectedBuilding.progress01 * 100)}%</b>
               </div>
               <div style={{ opacity: 0.92, marginTop: 4, fontSize: 14 }}>
-                {t("secondsToNext")}: <b>{selectedBuilding.secondsToNext}s</b>
+                {t("secondsToNext")}: <b>{selectedBuilding.secondsToNext >= 0 ? `${selectedBuilding.secondsToNext}s` : t("noWorkers")}</b>
               </div>
             </>
           ) : null}

@@ -65,6 +65,11 @@ const dict = {
     forestAdj: "Лес рядом",
     warehousePresent: "Склад доступен",
 
+    workers: "Рабочие",
+    workersNearby: "Рядом",
+    efficiency: "Эффективность",
+    noWorkers: "нет рабочих",
+
     slot_food: "Еда",
     slot_furniture: "Мебель",
     slot_pottery: "Посуда",
@@ -131,6 +136,11 @@ const dict = {
     secondsToNext: "Time to next unit",
     forestAdj: "Adjacent forest",
     warehousePresent: "Warehouse available",
+
+    workers: "Workers",
+    workersNearby: "Nearby",
+    efficiency: "Efficiency",
+    noWorkers: "no workers",
 
     slot_food: "Food",
     slot_furniture: "Furniture",

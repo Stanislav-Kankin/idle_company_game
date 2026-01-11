@@ -25,6 +25,9 @@ export type WarehouseInfo = {
   kind: "warehouse";
   x: number;
   y: number;
+  workersRequired: number;
+  workersAssigned: number;
+  workersNearby: number;
   capacity: number;
   total: number;
   stored: EconomyState;
@@ -34,6 +37,9 @@ export type MarketInfo = {
   kind: "market";
   x: number;
   y: number;
+  workersRequired: number;
+  workersAssigned: number;
+  workersNearby: number;
   capacity: number;
   total: number;
   slotMax: number;
@@ -44,6 +50,9 @@ export type LumbermillInfo = {
   kind: "lumbermill";
   x: number;
   y: number;
+  workersRequired: number;
+  workersAssigned: number;
+  workersNearby: number;
   hasForestAdj: boolean;
   hasWarehouse: boolean;
   progress01: number; // 0..1
