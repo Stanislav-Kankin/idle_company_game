@@ -120,17 +120,17 @@ export function stepProduction(params: {
   }
 
   // Apply cycles: take inputs, then store outputs.
-  let w = warehouse;
+  const w = warehouse;
   for (let c = 0; c < cyclesAllowed; c++) {
     if (params.recipe.inputs) {
       for (const k of Object.keys(params.recipe.inputs) as ResourceId[]) {
         const need = params.recipe.inputs[k] ?? 0;
-        if (need > 0) w = take(w, k, need);
+        if (need > 0) take(w, k, need);
       }
     }
     for (const k of Object.keys(params.recipe.outputs) as ResourceId[]) {
       const add = params.recipe.outputs[k] ?? 0;
-      if (add > 0) w = store(w, k, add, params.capacity);
+      if (add > 0) store(w, k, add, params.capacity);
     }
   }
 
