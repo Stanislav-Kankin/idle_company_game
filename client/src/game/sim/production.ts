@@ -1,4 +1,4 @@
-import { EconomyState, ProductionBlockReason, ProductionRecipe, ResourceId } from "../types";
+import type { EconomyState, ProductionBlockReason, ProductionRecipe, ResourceId } from "../types";
 import { emptyEconomyState, remainingCapacity, store, take } from "./warehouse";
 
 export type StepProductionResult = {
