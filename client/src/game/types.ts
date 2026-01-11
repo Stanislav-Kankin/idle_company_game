@@ -6,12 +6,14 @@ export type Tool =
   | "market"
   | "warehouse"
   | "lumbermill"
+  | "clay_quarry"
+  | "pottery"
   | "bulldoze";
 
-export type CellType = "empty" | "road" | "house" | "well" | "market" | "warehouse" | "lumbermill";
+export type CellType = "empty" | "road" | "house" | "well" | "market" | "warehouse" | "lumbermill" | "clay_quarry" | "pottery";
 
 // Economy (MVP): raw resources only.
-export type ResourceId = "wood" | "clay" | "grain" | "meat" | "fish";
+export type ResourceId = "wood" | "clay" | "grain" | "meat" | "fish" | "pottery";
 
 export type EconomyState = Record<ResourceId, number>;
 
@@ -72,12 +74,38 @@ export type LumbermillInfo = {
   secondsToNext: number;
 };
 
-export type BuildingInfo = WarehouseInfo | MarketInfo | LumbermillInfo;
+export type ClayQuarryInfo = {
+  kind: "clay_quarry";
+  x: number;
+  y: number;
+  workersRequired: number;
+  workersAssigned: number;
+  workersNearby: number;
+  progress01: number; // 0..1
+  efficiency: number; // 0..1
+  blocked: ProductionBlockReason[];
+  secondsToNext: number;
+};
+
+export type PotteryInfo = {
+  kind: "pottery";
+  x: number;
+  y: number;
+  workersRequired: number;
+  workersAssigned: number;
+  workersNearby: number;
+  progress01: number; // 0..1
+  efficiency: number; // 0..1
+  blocked: ProductionBlockReason[];
+  secondsToNext: number;
+};
+
+export type BuildingInfo = WarehouseInfo | MarketInfo | LumbermillInfo | ClayQuarryInfo | PotteryInfo;
 
 export type Grid = {
   cols: number;
   rows: number;
-  cells: Uint8Array; // 0 empty, 1 road, 2 house, 3 well, 4 market, 5 warehouse, 6 lumbermill
+  cells: Uint8Array; // 0 empty, 1 road, 2 house, 3 well, 4 market, 5 warehouse, 6 lumbermill, 7 clay_quarry, 8 pottery
 };
 
 export type HouseInfo = {
@@ -121,6 +149,8 @@ export function cellTypeAt(grid: Grid, x: number, y: number): CellType {
   if (v === 4) return "market";
   if (v === 5) return "warehouse";
   if (v === 6) return "lumbermill";
+  if (v === 7) return "clay_quarry";
+  if (v === 8) return "pottery";
   return "empty";
 }
 
@@ -150,6 +180,10 @@ export function setCell(grid: Grid, x: number, y: number, t: CellType) {
               ? 5
               : t === "lumbermill"
                 ? 6
-                : 0;
+                : t === "clay_quarry"
+                  ? 7
+                  : t === "pottery"
+                    ? 8
+                    : 0;
   grid.cells[idx(x, y, grid.cols)] = v;
 }

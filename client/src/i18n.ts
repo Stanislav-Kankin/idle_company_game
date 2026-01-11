@@ -45,6 +45,8 @@ const dict = {
     tool_market: "Рынок",
     tool_warehouse: "Склад",
     tool_lumbermill: "Лесопилка",
+    tool_clay_quarry: "Глиняный карьер",
+    tool_pottery: "Гончарная",
     tool_bulldoze: "Снос",
 
     wood: "Дерево",
@@ -52,6 +54,7 @@ const dict = {
     grain: "Зерно",
     meat: "Мясо",
     fish: "Рыба",
+    pottery: "Посуда",
 
     requiresForestAdj: "Нужен лес рядом",
     requiresRoadAdj: "Нужна дорога рядом",
@@ -124,6 +127,8 @@ const dict = {
     tool_market: "Market",
     tool_warehouse: "Warehouse",
     tool_lumbermill: "Lumbermill",
+    tool_clay_quarry: "Clay quarry",
+    tool_pottery: "Pottery",
     tool_bulldoze: "Bulldoze",
 
     wood: "Wood",
@@ -131,6 +136,7 @@ const dict = {
     grain: "Grain",
     meat: "Meat",
     fish: "Fish",
+    pottery: "Pottery",
 
     requiresForestAdj: "Needs adjacent forest",
     requiresRoadAdj: "Needs adjacent road",

@@ -40,6 +40,14 @@ function isLumbermill(grid: Grid, x: number, y: number) {
   return cellAt(grid, x, y) === 6;
 }
 
+function isClayQuarry(grid: Grid, x: number, y: number) {
+  return cellAt(grid, x, y) === 7;
+}
+
+function isPottery(grid: Grid, x: number, y: number) {
+  return cellAt(grid, x, y) === 8;
+}
+
 function getSpriteFrame(sp: SpriteEntry, now: number): SpriteFrame {
   if (!sp.frameMs || sp.frames.length <= 1) return sp.frames[0]!;
   const idx = Math.floor(now / sp.frameMs) % sp.frames.length;
@@ -333,6 +341,54 @@ function drawLumbermill(ctx: CanvasRenderingContext2D, x: number, y: number, til
   ctx.stroke();
 }
 
+function drawClayQuarry(ctx: CanvasRenderingContext2D, x: number, y: number, tile: number) {
+  const px = x * tile;
+  const py = y * tile;
+
+  // base
+  ctx.fillStyle = "rgba(120, 120, 120, 0.35)";
+  ctx.fillRect(px + 4, py + tile / 2, tile - 8, tile / 2 - 4);
+
+  // pit
+  ctx.fillStyle = "rgba(80, 80, 80, 0.55)";
+  ctx.beginPath();
+  ctx.ellipse(px + tile / 2, py + tile * 0.72, tile * 0.28, tile * 0.16, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // small pile
+  ctx.fillStyle = "rgba(160, 160, 160, 0.55)";
+  ctx.beginPath();
+  ctx.moveTo(px + tile * 0.22, py + tile * 0.58);
+  ctx.lineTo(px + tile * 0.36, py + tile * 0.52);
+  ctx.lineTo(px + tile * 0.46, py + tile * 0.62);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawPottery(ctx: CanvasRenderingContext2D, x: number, y: number, tile: number) {
+  const px = x * tile;
+  const py = y * tile;
+
+  // workshop base
+  ctx.fillStyle = "rgba(125, 92, 60, 0.55)";
+  ctx.fillRect(px + 6, py + tile / 2 + 4, tile - 12, tile / 2 - 8);
+
+  // roof
+  ctx.fillStyle = "rgba(110, 70, 40, 0.65)";
+  ctx.beginPath();
+  ctx.moveTo(px + 6, py + tile / 2 + 4);
+  ctx.lineTo(px + tile / 2, py + 8);
+  ctx.lineTo(px + tile - 6, py + tile / 2 + 4);
+  ctx.closePath();
+  ctx.fill();
+
+  // kiln circle
+  ctx.fillStyle = "rgba(90, 90, 90, 0.65)";
+  ctx.beginPath();
+  ctx.arc(px + tile * 0.72, py + tile * 0.72, tile * 0.12, 0, Math.PI * 2);
+  ctx.fill();
+}
+
 function drawWalker(ctx: CanvasRenderingContext2D, wk: Walker, tile: number, now: number) {
   // Smooth interpolation between prev -> current using nextMoveAt cadence.
   const startAt = wk.nextMoveAt - WALKER_MOVE_EVERY_MS_DEFAULT;
@@ -471,6 +527,10 @@ export function render(
         const sp = sprites?.lumbermill;
         if (sp) drawSpriteAtTileBottomCenter(ctx, sp, x, y, world.tile, now);
         else drawLumbermill(ctx, x, y, world.tile);
+      } else if (isClayQuarry(grid, x, y)) {
+        drawClayQuarry(ctx, x, y, world.tile);
+      } else if (isPottery(grid, x, y)) {
+        drawPottery(ctx, x, y, world.tile);
       } else if (isHouse(grid, x, y)) {
         const i = y * grid.cols + x;
         const level = houseLevels[i] || 1;

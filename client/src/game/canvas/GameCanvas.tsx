@@ -47,10 +47,20 @@ const MARKET_SLOT_MAX = 10;
 const LUMBERMILL_WOOD_TIME_MS = 60_000;
 const LUMBERMILL_RECIPE: ProductionRecipe = { durationMs: LUMBERMILL_WOOD_TIME_MS, outputs: { wood: 1 } };
 
+// Clay Quarry: 1 clay per 2 minutes
+const CLAY_QUARRY_TIME_MS = 120_000;
+const CLAY_QUARRY_RECIPE: ProductionRecipe = { durationMs: CLAY_QUARRY_TIME_MS, outputs: { clay: 1 } };
+
+// Pottery: 4 clay -> 1 pottery per 4.5 minutes
+const POTTERY_TIME_MS = 270_000;
+const POTTERY_RECIPE: ProductionRecipe = { durationMs: POTTERY_TIME_MS, inputs: { clay: 4 }, outputs: { pottery: 1 } };
+
 // Workforce (Iteration C2)
 const WORKER_RADIUS_TILES = 10;
 const WORKERS_LUMBERMILL = 10;
 const WORKERS_MARKET = 2;
+const WORKERS_CLAY_QUARRY = 8;
+const WORKERS_POTTERY = 10;
 
 type MinimapPayload = {
   cols: number;
@@ -128,6 +138,8 @@ export function GameCanvas(props: {
   const warehousesRef = useRef<Map<number, EconomyState>>(new Map());
   const marketsRef = useRef<Map<number, MarketSlots>>(new Map());
   const lumbermillProgressRef = useRef<Map<number, number>>(new Map()); // ms
+  const clayQuarryProgressRef = useRef<Map<number, number>>(new Map()); // ms
+  const potteryProgressRef = useRef<Map<number, number>>(new Map()); // ms
 
   // Workforce assignment (recomputed periodically)
   const workersAssignedRef = useRef<Map<number, number>>(new Map());
@@ -261,6 +273,10 @@ export function GameCanvas(props: {
         if (!marketsRef.current.has(i)) marketsRef.current.set(i, emptyMarketSlots());
       } else if (v === 6) {
         if (!lumbermillProgressRef.current.has(i)) lumbermillProgressRef.current.set(i, 0);
+      } else if (v === 7) {
+        if (!clayQuarryProgressRef.current.has(i)) clayQuarryProgressRef.current.set(i, 0);
+      } else if (v === 8) {
+        if (!potteryProgressRef.current.has(i)) potteryProgressRef.current.set(i, 0);
       }
     }
 
@@ -274,18 +290,27 @@ export function GameCanvas(props: {
     for (const k of Array.from(lumbermillProgressRef.current.keys())) {
       if (cells[k] !== 6) lumbermillProgressRef.current.delete(k);
     }
+    for (const k of Array.from(clayQuarryProgressRef.current.keys())) {
+      if (cells[k] !== 7) clayQuarryProgressRef.current.delete(k);
+    }
+    for (const k of Array.from(potteryProgressRef.current.keys())) {
+      if (cells[k] !== 8) potteryProgressRef.current.delete(k);
+    }
 
+    // Keep workforce maps only for active buildings that require workers.
     for (const k of Array.from(workersAssignedRef.current.keys())) {
-      if (cells[k] !== 4 && cells[k] !== 5 && cells[k] !== 6) workersAssignedRef.current.delete(k);
+      if (cells[k] !== 4 && cells[k] !== 5 && cells[k] !== 6 && cells[k] !== 7 && cells[k] !== 8) workersAssignedRef.current.delete(k);
     }
     for (const k of Array.from(workersNearbyRef.current.keys())) {
-      if (cells[k] !== 4 && cells[k] !== 5 && cells[k] !== 6) workersNearbyRef.current.delete(k);
+      if (cells[k] !== 4 && cells[k] !== 5 && cells[k] !== 6 && cells[k] !== 7 && cells[k] !== 8) workersNearbyRef.current.delete(k);
     }
   }
 
   function requiredWorkersForCell(v: number): number {
     if (v === 6) return WORKERS_LUMBERMILL;
     if (v === 4) return WORKERS_MARKET;
+    if (v === 7) return WORKERS_CLAY_QUARRY;
+    if (v === 8) return WORKERS_POTTERY;
     return 0;
   }
 
@@ -379,7 +404,7 @@ export function GameCanvas(props: {
 
   function getBuildingInfoAt(x: number, y: number): BuildingInfo | null {
     const ct = cellTypeAt(gridRef.current, x, y);
-    if (ct !== "warehouse" && ct !== "market" && ct !== "lumbermill") return null;
+    if (ct !== "warehouse" && ct !== "market" && ct !== "lumbermill" && ct !== "clay_quarry" && ct !== "pottery") return null;
 
     const cols = gridRef.current.cols;
     const i = y * cols + x;
@@ -387,13 +412,14 @@ export function GameCanvas(props: {
     // Make inspector robust even if state wasn't initialized yet
     syncBuildingStateFromGrid();
 
+    const v = gridRef.current.cells[i] ?? 0;
+    const req = requiredWorkersForCell(v);
+    const assigned = workersAssignedRef.current.get(i) ?? 0;
+    const nearby = workersNearbyRef.current.get(i) ?? 0;
+    const efficiency = req > 0 ? Math.min(1, assigned / req) : 1;
+
     if (ct === "warehouse") {
       const stored = warehousesRef.current.get(i) ?? emptyEconomyState();
-      const v = gridRef.current.cells[i] ?? 0;
-      const req = requiredWorkersForCell(v);
-      const assigned = workersAssignedRef.current.get(i) ?? 0;
-      const nearby = workersNearbyRef.current.get(i) ?? 0;
-      const efficiency = req > 0 ? Math.min(1, assigned / req) : 1;
       return {
         kind: "warehouse",
         x,
@@ -411,11 +437,6 @@ export function GameCanvas(props: {
     if (ct === "market") {
       const slots = marketsRef.current.get(i) ?? emptyMarketSlots();
       const total = (slots.food ?? 0) + (slots.furniture ?? 0) + (slots.pottery ?? 0) + (slots.wine ?? 0) + (slots.other ?? 0);
-      const v = gridRef.current.cells[i] ?? 0;
-      const req = requiredWorkersForCell(v);
-      const assigned = workersAssignedRef.current.get(i) ?? 0;
-      const nearby = workersNearbyRef.current.get(i) ?? 0;
-      const efficiency = req > 0 ? Math.min(1, assigned / req) : 1;
       return {
         kind: "market",
         x,
@@ -431,43 +452,103 @@ export function GameCanvas(props: {
       };
     }
 
-    // lumbermill
-    const progressMs = lumbermillProgressRef.current.get(i) ?? 0;
-    const clamped = Math.max(0, Math.min(LUMBERMILL_WOOD_TIME_MS, progressMs));
-    const v = gridRef.current.cells[i] ?? 0;
-    const req = requiredWorkersForCell(v);
-    const assigned = workersAssignedRef.current.get(i) ?? 0;
-    const nearby = workersNearbyRef.current.get(i) ?? 0;
-    const k = req > 0 ? Math.min(1, assigned / req) : 1;
+    if (ct === "lumbermill") {
+      const progressMs = lumbermillProgressRef.current.get(i) ?? 0;
+      const clamped = Math.max(0, Math.min(LUMBERMILL_WOOD_TIME_MS, progressMs));
+
+      const blocked: ProductionBlockReason[] = [];
+      const hasForestAdj = hasAdjacentForest(x, y);
+      const nearest = findNearestWarehouseIndex(x, y);
+
+      if (req > 0 && assigned <= 0) blocked.push("no_workers");
+      if (!hasForestAdj) blocked.push("bad_placement");
+      if (nearest === null) blocked.push("no_warehouse");
+      else {
+        const store = warehousesRef.current.get(nearest) ?? emptyEconomyState();
+        if (totalStored(store) >= WAREHOUSE_CAPACITY) blocked.push("warehouse_full");
+      }
+
+      const secondsToNext =
+        blocked.length === 0 && efficiency > 0
+          ? Math.ceil(Math.max(0, (LUMBERMILL_WOOD_TIME_MS - clamped) / (1000 * efficiency)))
+          : -1;
+
+      return {
+        kind: "lumbermill",
+        x,
+        y,
+        workersRequired: req,
+        workersAssigned: assigned,
+        workersNearby: nearby,
+        hasForestAdj,
+        hasWarehouse: warehousesRef.current.size > 0,
+        progress01: clamped / LUMBERMILL_WOOD_TIME_MS,
+        efficiency,
+        blocked,
+        secondsToNext,
+      };
+    }
+
+    if (ct === "clay_quarry") {
+      const progressMs = clayQuarryProgressRef.current.get(i) ?? 0;
+      const clamped = Math.max(0, Math.min(CLAY_QUARRY_TIME_MS, progressMs));
+
+      const blocked: ProductionBlockReason[] = [];
+      const nearest = findNearestWarehouseIndex(x, y);
+
+      if (req > 0 && assigned <= 0) blocked.push("no_workers");
+      if (nearest === null) blocked.push("no_warehouse");
+      else {
+        const store = warehousesRef.current.get(nearest) ?? emptyEconomyState();
+        if (totalStored(store) >= WAREHOUSE_CAPACITY) blocked.push("warehouse_full");
+      }
+
+      const secondsToNext =
+        blocked.length === 0 && efficiency > 0
+          ? Math.ceil(Math.max(0, (CLAY_QUARRY_TIME_MS - clamped) / (1000 * efficiency)))
+          : -1;
+
+      return {
+        kind: "clay_quarry",
+        x,
+        y,
+        workersRequired: req,
+        workersAssigned: assigned,
+        workersNearby: nearby,
+        progress01: clamped / CLAY_QUARRY_TIME_MS,
+        efficiency,
+        blocked,
+        secondsToNext,
+      };
+    }
+
+    // pottery
+    const progressMs = potteryProgressRef.current.get(i) ?? 0;
+    const clamped = Math.max(0, Math.min(POTTERY_TIME_MS, progressMs));
 
     const blocked: ProductionBlockReason[] = [];
-    const hasForestAdj = hasAdjacentForest(x, y);
     const nearest = findNearestWarehouseIndex(x, y);
 
     if (req > 0 && assigned <= 0) blocked.push("no_workers");
-    if (!hasForestAdj) blocked.push("bad_placement");
     if (nearest === null) blocked.push("no_warehouse");
     else {
       const store = warehousesRef.current.get(nearest) ?? emptyEconomyState();
+      if ((store.clay ?? 0) < 4) blocked.push("no_inputs");
       if (totalStored(store) >= WAREHOUSE_CAPACITY) blocked.push("warehouse_full");
     }
 
     const secondsToNext =
-      blocked.length === 0 && k > 0
-        ? Math.ceil(Math.max(0, (LUMBERMILL_WOOD_TIME_MS - clamped) / (1000 * k)))
-        : -1;
+      blocked.length === 0 && efficiency > 0 ? Math.ceil(Math.max(0, (POTTERY_TIME_MS - clamped) / (1000 * efficiency))) : -1;
 
     return {
-      kind: "lumbermill",
+      kind: "pottery",
       x,
       y,
       workersRequired: req,
       workersAssigned: assigned,
       workersNearby: nearby,
-      hasForestAdj,
-      hasWarehouse: warehousesRef.current.size > 0,
-      progress01: clamped / LUMBERMILL_WOOD_TIME_MS,
-      efficiency: k,
+      progress01: clamped / POTTERY_TIME_MS,
+      efficiency,
       blocked,
       secondsToNext,
     };
@@ -534,7 +615,7 @@ export function GameCanvas(props: {
         }
 
         // Tap other buildings -> open inspector (unless bulldoze)
-        if ((current === "warehouse" || current === "market" || current === "lumbermill") && t !== "bulldoze") {
+        if ((current === "warehouse" || current === "market" || current === "lumbermill" || current === "clay_quarry" || current === "pottery") && t !== "bulldoze") {
           const info = getBuildingInfoAt(tile.x, tile.y);
           onBuildingSelectRef.current?.(info);
           onHouseSelectRef.current?.(null);
@@ -560,6 +641,8 @@ export function GameCanvas(props: {
           if (current === "warehouse") warehousesRef.current.delete(i);
           if (current === "market") marketsRef.current.delete(i);
           if (current === "lumbermill") lumbermillProgressRef.current.delete(i);
+          if (current === "clay_quarry") clayQuarryProgressRef.current.delete(i);
+          if (current === "pottery") potteryProgressRef.current.delete(i);
 
           return;
         }
@@ -637,6 +720,37 @@ export function GameCanvas(props: {
           lumbermillProgressRef.current.set(i, 0);
           return;
         }
+
+
+if (t === "clay_quarry") {
+  if (!hasAdjacentRoad(gridRef.current, tile.x, tile.y)) {
+    notifyKeyRef.current?.("requiresRoadAdj");
+    return;
+  }
+
+  const cost = buildCostsRef.current.clay_quarry ?? 0;
+  if (!trySpendRef.current(cost)) return;
+
+  setCell(gridRef.current, tile.x, tile.y, "clay_quarry");
+  const i = tile.y * gridRef.current.cols + tile.x;
+  clayQuarryProgressRef.current.set(i, 0);
+  return;
+}
+
+if (t === "pottery") {
+  if (!hasAdjacentRoad(gridRef.current, tile.x, tile.y)) {
+    notifyKeyRef.current?.("requiresRoadAdj");
+    return;
+  }
+
+  const cost = buildCostsRef.current.pottery ?? 0;
+  if (!trySpendRef.current(cost)) return;
+
+  setCell(gridRef.current, tile.x, tile.y, "pottery");
+  const i = tile.y * gridRef.current.cols + tile.x;
+  potteryProgressRef.current.set(i, 0);
+  return;
+}
 
         if (t === "road") {
           const cost = buildCostsRef.current.road ?? 0;
@@ -733,6 +847,74 @@ export function GameCanvas(props: {
           lumbermillProgressRef.current.set(idx, res.nextProgressMs);
         }
 
+        // Production: Clay Quarry -> nearest Warehouse (1 clay per 120s)
+        for (let idx = 0; idx < cells.length; idx++) {
+          if (cells[idx] !== 7) continue; // clay quarry
+
+          const x = idx % cols;
+          const y = (idx / cols) | 0;
+
+          const nearest = findNearestWarehouseIndex(x, y);
+          const store = nearest !== null ? warehousesRef.current.get(nearest) ?? emptyEconomyState() : null;
+
+          const v = gridRef.current.cells[idx] ?? 0;
+          const req = requiredWorkersForCell(v);
+          const assigned = workersAssignedRef.current.get(idx) ?? 0;
+          const efficiency = req > 0 ? Math.min(1, assigned / req) : 1;
+
+          const prev = clayQuarryProgressRef.current.get(idx) ?? 0;
+
+          const res = stepProduction({
+            dtMs: 1000,
+            progressMs: prev,
+            efficiency,
+            recipe: CLAY_QUARRY_RECIPE,
+            placementOk: true,
+            warehouse: store,
+            capacity: WAREHOUSE_CAPACITY,
+          });
+
+          if (nearest !== null && res.nextWarehouse) {
+            warehousesRef.current.set(nearest, res.nextWarehouse);
+          }
+
+          clayQuarryProgressRef.current.set(idx, res.nextProgressMs);
+        }
+
+        // Production: Pottery -> nearest Warehouse (4 clay -> 1 pottery per 270s)
+        for (let idx = 0; idx < cells.length; idx++) {
+          if (cells[idx] !== 8) continue; // pottery
+
+          const x = idx % cols;
+          const y = (idx / cols) | 0;
+
+          const nearest = findNearestWarehouseIndex(x, y);
+          const store = nearest !== null ? warehousesRef.current.get(nearest) ?? emptyEconomyState() : null;
+
+          const v = gridRef.current.cells[idx] ?? 0;
+          const req = requiredWorkersForCell(v);
+          const assigned = workersAssignedRef.current.get(idx) ?? 0;
+          const efficiency = req > 0 ? Math.min(1, assigned / req) : 1;
+
+          const prev = potteryProgressRef.current.get(idx) ?? 0;
+
+          const res = stepProduction({
+            dtMs: 1000,
+            progressMs: prev,
+            efficiency,
+            recipe: POTTERY_RECIPE,
+            placementOk: true,
+            warehouse: store,
+            capacity: WAREHOUSE_CAPACITY,
+          });
+
+          if (nearest !== null && res.nextWarehouse) {
+            warehousesRef.current.set(nearest, res.nextWarehouse);
+          }
+
+          potteryProgressRef.current.set(idx, res.nextProgressMs);
+        }
+
         // Update HUD economy as sum of all warehouses
         const sum = emptyEconomyState();
         for (const store of warehousesRef.current.values()) {
@@ -741,6 +923,7 @@ export function GameCanvas(props: {
           sum.grain += store.grain ?? 0;
           sum.meat += store.meat ?? 0;
           sum.fish += store.fish ?? 0;
+          sum.pottery += store.pottery ?? 0;
         }
         economyRef.current = sum;
       }

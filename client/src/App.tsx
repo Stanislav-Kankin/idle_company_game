@@ -40,7 +40,7 @@ export default function App() {
   const [stats, setStats] = useState<CityStats | null>(null);
 
   // Economy (resources live in sim; money still UI-owned for now)
-  const [economy, setEconomy] = useState<EconomyState>({ wood: 0, clay: 0, grain: 0, meat: 0, fish: 0 });
+  const [economy, setEconomy] = useState<EconomyState>({ wood: 0, clay: 0, grain: 0, meat: 0, fish: 0, pottery: 0 });
 
   // Экономика (пока клиентская, позже перенесём на сервер)
   const [money, setMoney] = useState<number>(START_MONEY);
@@ -63,6 +63,8 @@ export default function App() {
       market: 200,
       warehouse: 120,
       lumbermill: 150,
+      clay_quarry: 140,
+      pottery: 160,
       bulldoze: 30,
     }),
     []
@@ -77,6 +79,8 @@ export default function App() {
       market: t("tool_market"),
       warehouse: t("tool_warehouse"),
       lumbermill: t("tool_lumbermill"),
+      clay_quarry: t("tool_clay_quarry"),
+      pottery: t("tool_pottery"),
       bulldoze: t("tool_bulldoze"),
     }),
     [lang]
@@ -230,6 +234,7 @@ export default function App() {
 
           <HudChip label={`🪵 ${t("wood")}`} value={economy.wood} />
           <HudChip label={`🧱 ${t("clay")}`} value={economy.clay} />
+          <HudChip label={`🏺 ${t("pottery")}`} value={economy.pottery} />
         </div>
 
         <div style={{ marginLeft: "auto", display: "flex", gap: 10, alignItems: "center" }}>
@@ -341,6 +346,20 @@ export default function App() {
           cost={buildCosts.lumbermill}
           onClick={() => setTool("lumbermill")}
         />
+        <ToolBtn
+          active={tool === "clay_quarry"}
+          icon="🧱"
+          title={toolLabel.clay_quarry}
+          cost={buildCosts.clay_quarry}
+          onClick={() => setTool("clay_quarry")}
+        />
+        <ToolBtn
+          active={tool === "pottery"}
+          icon="🏺"
+          title={toolLabel.pottery}
+          cost={buildCosts.pottery}
+          onClick={() => setTool("pottery")}
+        />
         <ToolBtn active={tool === "bulldoze"} icon="🛠️" title={toolLabel.bulldoze} cost={buildCosts.bulldoze} onClick={() => setTool("bulldoze")} />
 
         <div style={{ opacity: 0.75, fontSize: 12, marginTop: 10, lineHeight: 1.35 }}>
@@ -416,7 +435,7 @@ export default function App() {
                 {t("total")}: <b>{hoverBuilding.total}</b> / <b>{hoverBuilding.capacity}</b>
               </div>
               <div style={{ opacity: 0.9, marginTop: 4, fontSize: 13 }}>
-                🪵 {t("wood")}: <b>{hoverBuilding.stored.wood}</b> • 🧱 {t("clay")}: <b>{hoverBuilding.stored.clay}</b>
+                🪵 {t("wood")}: <b>{hoverBuilding.stored.wood}</b> • 🧱 {t("clay")}: <b>{hoverBuilding.stored.clay}</b> • 🏺 {t("pottery")}: <b>{hoverBuilding.stored.pottery}</b>
               </div>
               <div style={{ opacity: 0.9, marginTop: 2, fontSize: 13 }}>
                 🌾 {t("grain")}: <b>{hoverBuilding.stored.grain}</b> • 🥩 {t("meat")}: <b>{hoverBuilding.stored.meat}</b> • 🐟 {t("fish")}: <b>{hoverBuilding.stored.fish}</b>
@@ -456,6 +475,84 @@ export default function App() {
                   {t("workers")}: <b>{hoverBuilding.workersAssigned}/{hoverBuilding.workersRequired}</b> • {t("workersNearby")}: <b>{hoverBuilding.workersNearby}</b> • {t("efficiency")}: <b>{Math.round((hoverBuilding.efficiency ?? 0) * 100)}%</b>
                 </div>
               ) : null}
+
+{hoverBuilding.kind === "clay_quarry" ? (
+  <>
+    <div style={{ fontWeight: 900 }}>
+      {t("tool_clay_quarry")} • ({hoverBuilding.x},{hoverBuilding.y})
+    </div>
+    {hoverBuilding.workersRequired > 0 ? (
+      <div style={{ opacity: 0.9, marginTop: 6, fontSize: 13 }}>
+        {t("workers")}: <b>{hoverBuilding.workersAssigned}/{hoverBuilding.workersRequired}</b> • {t("workersNearby")}: <b>{hoverBuilding.workersNearby}</b> • {t("efficiency")}: <b>{Math.round((hoverBuilding.efficiency ?? 0) * 100)}%</b>
+      </div>
+    ) : null}
+    <div style={{ opacity: 0.9, marginTop: 6, fontSize: 13 }}>
+      {t("progress")}: <b>{Math.round(hoverBuilding.progress01 * 100)}%</b> • {t("secondsToNext")}:{" "}
+      <b>{hoverBuilding.blocked?.length ? t("stopped") : hoverBuilding.secondsToNext >= 0 ? `${hoverBuilding.secondsToNext}s` : t("stopped")}</b>
+    </div>
+    {hoverBuilding.blocked?.length ? (
+      <div style={{ opacity: 0.9, marginTop: 6, fontSize: 13 }}>
+        {t("blocked")}:{" "}
+        <b>
+          {hoverBuilding.blocked
+            .map((b) =>
+              b === "no_workers"
+                ? t("noWorkers")
+                : b === "no_warehouse"
+                  ? t("noWarehouse")
+                  : b === "warehouse_full"
+                    ? t("warehouseFull")
+                    : b === "bad_placement"
+                      ? t("badPlacement")
+                      : b === "no_inputs"
+                        ? t("noInputs")
+                        : b
+            )
+            .join(", ")}
+        </b>
+      </div>
+    ) : null}
+  </>
+) : null}
+
+{hoverBuilding.kind === "pottery" ? (
+  <>
+    <div style={{ fontWeight: 900 }}>
+      {t("tool_pottery")} • ({hoverBuilding.x},{hoverBuilding.y})
+    </div>
+    {hoverBuilding.workersRequired > 0 ? (
+      <div style={{ opacity: 0.9, marginTop: 6, fontSize: 13 }}>
+        {t("workers")}: <b>{hoverBuilding.workersAssigned}/{hoverBuilding.workersRequired}</b> • {t("workersNearby")}: <b>{hoverBuilding.workersNearby}</b> • {t("efficiency")}: <b>{Math.round((hoverBuilding.efficiency ?? 0) * 100)}%</b>
+      </div>
+    ) : null}
+    <div style={{ opacity: 0.9, marginTop: 6, fontSize: 13 }}>
+      {t("progress")}: <b>{Math.round(hoverBuilding.progress01 * 100)}%</b> • {t("secondsToNext")}:{" "}
+      <b>{hoverBuilding.blocked?.length ? t("stopped") : hoverBuilding.secondsToNext >= 0 ? `${hoverBuilding.secondsToNext}s` : t("stopped")}</b>
+    </div>
+    {hoverBuilding.blocked?.length ? (
+      <div style={{ opacity: 0.9, marginTop: 6, fontSize: 13 }}>
+        {t("blocked")}:{" "}
+        <b>
+          {hoverBuilding.blocked
+            .map((b) =>
+              b === "no_workers"
+                ? t("noWorkers")
+                : b === "no_warehouse"
+                  ? t("noWarehouse")
+                  : b === "warehouse_full"
+                    ? t("warehouseFull")
+                    : b === "bad_placement"
+                      ? t("badPlacement")
+                      : b === "no_inputs"
+                        ? t("noInputs")
+                        : b
+            )
+            .join(", ")}
+        </b>
+      </div>
+    ) : null}
+  </>
+) : null}
               <div style={{ opacity: 0.9, marginTop: 6, fontSize: 13 }}>
                 {t("forestAdj")}: <b>{hoverBuilding.hasForestAdj ? t("yes") : t("no")}</b> • {t("warehousePresent")}: <b>{hoverBuilding.hasWarehouse ? t("yes") : t("no")}</b>
               </div>
@@ -553,6 +650,8 @@ export default function App() {
               {selectedBuilding.kind === "warehouse" ? t("tool_warehouse") : null}
               {selectedBuilding.kind === "market" ? t("tool_market") : null}
               {selectedBuilding.kind === "lumbermill" ? t("tool_lumbermill") : null}
+              {selectedBuilding.kind === "clay_quarry" ? t("tool_clay_quarry") : null}
+              {selectedBuilding.kind === "pottery" ? t("tool_pottery") : null}
               {" "}({selectedBuilding.x},{selectedBuilding.y})
             </div>
             <button onClick={() => setSelectedBuilding(null)} style={btnStyle(false)}>
@@ -584,6 +683,9 @@ export default function App() {
               </div>
               <div style={{ opacity: 0.92, marginTop: 4, fontSize: 14 }}>
                 🐟 {t("fish")}: <b>{selectedBuilding.stored.fish}</b>
+              </div>
+              <div style={{ opacity: 0.9, marginTop: 4, fontSize: 13 }}>
+                🏺 {t("pottery")}: <b>{selectedBuilding.stored.pottery}</b>
               </div>
             </>
           ) : null}
@@ -623,6 +725,90 @@ export default function App() {
                   {t("workers")}: <b>{selectedBuilding.workersAssigned}/{selectedBuilding.workersRequired}</b> • {t("workersNearby")}: <b>{selectedBuilding.workersNearby}</b> • {t("efficiency")}: <b>{Math.round((selectedBuilding.workersAssigned / Math.max(1, selectedBuilding.workersRequired)) * 100)}%</b>
                 </div>
               ) : null}
+
+{selectedBuilding.kind === "clay_quarry" ? (
+  <>
+    {selectedBuilding.workersRequired > 0 ? (
+      <div style={{ opacity: 0.9, marginTop: 6, fontSize: 13 }}>
+        {t("workers")}: <b>{selectedBuilding.workersAssigned}/{selectedBuilding.workersRequired}</b> • {t("workersNearby")}: <b>{selectedBuilding.workersNearby}</b> • {t("efficiency")}: <b>{Math.round((selectedBuilding.workersAssigned / Math.max(1, selectedBuilding.workersRequired)) * 100)}%</b>
+      </div>
+    ) : null}
+
+    <div style={{ opacity: 0.9, marginTop: 6, fontSize: 13 }}>
+      {t("progress")}: <b>{Math.round(selectedBuilding.progress01 * 100)}%</b>
+    </div>
+    <div style={{ opacity: 0.9, marginTop: 2, fontSize: 13 }}>
+      {t("secondsToNext")}: <b>{selectedBuilding.blocked?.length ? t("stopped") : selectedBuilding.secondsToNext >= 0 ? `${selectedBuilding.secondsToNext}s` : t("stopped")}</b>
+    </div>
+
+    {selectedBuilding.blocked?.length ? (
+      <div style={{ opacity: 0.9, marginTop: 8, fontSize: 13 }}>
+        <div style={{ fontWeight: 800, marginBottom: 4 }}>{t("blocked")}:</div>
+        <ul style={{ margin: 0, paddingLeft: 18 }}>
+          {selectedBuilding.blocked
+            .map((b) =>
+              b === "no_workers"
+                ? t("noWorkers")
+                : b === "no_warehouse"
+                  ? t("noWarehouse")
+                  : b === "warehouse_full"
+                    ? t("warehouseFull")
+                    : b === "bad_placement"
+                      ? t("badPlacement")
+                      : b === "no_inputs"
+                        ? t("noInputs")
+                        : b
+            )
+            .map((s, idx) => (
+              <li key={idx}>{s}</li>
+            ))}
+        </ul>
+      </div>
+    ) : null}
+  </>
+) : null}
+
+{selectedBuilding.kind === "pottery" ? (
+  <>
+    {selectedBuilding.workersRequired > 0 ? (
+      <div style={{ opacity: 0.9, marginTop: 6, fontSize: 13 }}>
+        {t("workers")}: <b>{selectedBuilding.workersAssigned}/{selectedBuilding.workersRequired}</b> • {t("workersNearby")}: <b>{selectedBuilding.workersNearby}</b> • {t("efficiency")}: <b>{Math.round((selectedBuilding.workersAssigned / Math.max(1, selectedBuilding.workersRequired)) * 100)}%</b>
+      </div>
+    ) : null}
+
+    <div style={{ opacity: 0.9, marginTop: 6, fontSize: 13 }}>
+      {t("progress")}: <b>{Math.round(selectedBuilding.progress01 * 100)}%</b>
+    </div>
+    <div style={{ opacity: 0.9, marginTop: 2, fontSize: 13 }}>
+      {t("secondsToNext")}: <b>{selectedBuilding.blocked?.length ? t("stopped") : selectedBuilding.secondsToNext >= 0 ? `${selectedBuilding.secondsToNext}s` : t("stopped")}</b>
+    </div>
+
+    {selectedBuilding.blocked?.length ? (
+      <div style={{ opacity: 0.9, marginTop: 8, fontSize: 13 }}>
+        <div style={{ fontWeight: 800, marginBottom: 4 }}>{t("blocked")}:</div>
+        <ul style={{ margin: 0, paddingLeft: 18 }}>
+          {selectedBuilding.blocked
+            .map((b) =>
+              b === "no_workers"
+                ? t("noWorkers")
+                : b === "no_warehouse"
+                  ? t("noWarehouse")
+                  : b === "warehouse_full"
+                    ? t("warehouseFull")
+                    : b === "bad_placement"
+                      ? t("badPlacement")
+                      : b === "no_inputs"
+                        ? t("noInputs")
+                        : b
+            )
+            .map((s, idx) => (
+              <li key={idx}>{s}</li>
+            ))}
+        </ul>
+      </div>
+    ) : null}
+  </>
+) : null}
               <div style={{ opacity: 0.92, marginTop: 8, fontSize: 14 }}>
                 {t("forestAdj")}: <b>{selectedBuilding.hasForestAdj ? t("yes") : t("no")}</b>
               </div>
@@ -765,7 +951,7 @@ function drawMinimap(canvas: HTMLCanvasElement, payload: MinimapPayload, scale: 
   }
 
   // Buildings overlay (slightly inset so terrain stays visible)
-  // 0 empty, 1 road, 2 house, 3 well, 4 market, 5 warehouse, 6 lumbermill
+  // 0 empty, 1 road, 2 house, 3 well, 4 market, 5 warehouse, 6 lumbermill, 7 clay_quarry, 8 pottery
   for (let y = 0; y < rows; y++) {
     for (let x = 0; x < cols; x++) {
       const v = cells[y * cols + x] ?? 0;
@@ -780,6 +966,8 @@ function drawMinimap(canvas: HTMLCanvasElement, payload: MinimapPayload, scale: 
       else if (v === 4) ctx.fillStyle = "#f59e0b";
       else if (v === 5) ctx.fillStyle = "#fbbf24"; // warehouse
       else if (v === 6) ctx.fillStyle = "#22c55e"; // lumbermill
+      else if (v === 7) ctx.fillStyle = "#94a3b8"; // clay quarry
+      else if (v === 8) ctx.fillStyle = "#f97316"; // pottery
       else ctx.fillStyle = "#ffffff";
 
       if (scale <= 1) ctx.fillRect(px, py, scale, scale);
