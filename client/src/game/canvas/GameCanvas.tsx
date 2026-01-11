@@ -13,6 +13,8 @@ import {
   type Grid,
   type HouseInfo,
   type MarketSlots,
+  type ProductionBlockReason,
+  type ProductionRecipe,
   type Tool,
   setCell,
 } from "../types";
@@ -30,9 +32,9 @@ import {
 import {
   WAREHOUSE_CAPACITY,
   emptyEconomyState,
-  store as storeToWarehouse,
   totalStored,
 } from "../sim/warehouse";
+import { stepProduction } from "../sim/production";
 import { generateTerrain, isTerrainBlockedForBuilding, TERRAIN } from "../map/terrain";
 import { loadSprites } from "../sprites/loader";
 import type { SpriteSet } from "../sprites/types";
@@ -43,6 +45,7 @@ const MARKET_SLOT_MAX = 10;
 
 // per 1 wood (requested): 1 minute
 const LUMBERMILL_WOOD_TIME_MS = 60_000;
+const LUMBERMILL_RECIPE: ProductionRecipe = { durationMs: LUMBERMILL_WOOD_TIME_MS, outputs: { wood: 1 } };
 
 // Workforce (Iteration C2)
 const WORKER_RADIUS_TILES = 10;
@@ -390,6 +393,7 @@ export function GameCanvas(props: {
       const req = requiredWorkersForCell(v);
       const assigned = workersAssignedRef.current.get(i) ?? 0;
       const nearby = workersNearbyRef.current.get(i) ?? 0;
+      const efficiency = req > 0 ? Math.min(1, assigned / req) : 1;
       return {
         kind: "warehouse",
         x,
@@ -397,6 +401,7 @@ export function GameCanvas(props: {
         workersRequired: req,
         workersAssigned: assigned,
         workersNearby: nearby,
+        efficiency,
         capacity: WAREHOUSE_CAPACITY,
         total: totalStored(stored),
         stored: { ...stored },
@@ -410,6 +415,7 @@ export function GameCanvas(props: {
       const req = requiredWorkersForCell(v);
       const assigned = workersAssignedRef.current.get(i) ?? 0;
       const nearby = workersNearbyRef.current.get(i) ?? 0;
+      const efficiency = req > 0 ? Math.min(1, assigned / req) : 1;
       return {
         kind: "market",
         x,
@@ -417,6 +423,7 @@ export function GameCanvas(props: {
         workersRequired: req,
         workersAssigned: assigned,
         workersNearby: nearby,
+        efficiency,
         capacity: MARKET_CAPACITY,
         total,
         slotMax: MARKET_SLOT_MAX,
@@ -432,7 +439,24 @@ export function GameCanvas(props: {
     const assigned = workersAssignedRef.current.get(i) ?? 0;
     const nearby = workersNearbyRef.current.get(i) ?? 0;
     const k = req > 0 ? Math.min(1, assigned / req) : 1;
-    const secondsToNext = k > 0 ? Math.ceil(Math.max(0, (LUMBERMILL_WOOD_TIME_MS - clamped) / (1000 * k))) : -1;
+
+    const blocked: ProductionBlockReason[] = [];
+    const hasForestAdj = hasAdjacentForest(x, y);
+    const nearest = findNearestWarehouseIndex(x, y);
+
+    if (req > 0 && assigned <= 0) blocked.push("no_workers");
+    if (!hasForestAdj) blocked.push("bad_placement");
+    if (nearest === null) blocked.push("no_warehouse");
+    else {
+      const store = warehousesRef.current.get(nearest) ?? emptyEconomyState();
+      if (totalStored(store) >= WAREHOUSE_CAPACITY) blocked.push("warehouse_full");
+    }
+
+    const secondsToNext =
+      blocked.length === 0 && k > 0
+        ? Math.ceil(Math.max(0, (LUMBERMILL_WOOD_TIME_MS - clamped) / (1000 * k)))
+        : -1;
+
     return {
       kind: "lumbermill",
       x,
@@ -440,9 +464,11 @@ export function GameCanvas(props: {
       workersRequired: req,
       workersAssigned: assigned,
       workersNearby: nearby,
-      hasForestAdj: hasAdjacentForest(x, y),
+      hasForestAdj,
       hasWarehouse: warehousesRef.current.size > 0,
       progress01: clamped / LUMBERMILL_WOOD_TIME_MS,
+      efficiency: k,
+      blocked,
       secondsToNext,
     };
   }
@@ -672,45 +698,39 @@ export function GameCanvas(props: {
         const cells = gridRef.current.cells;
         const cols = gridRef.current.cols;
 
-        // Production: Lumbermill -> nearest Warehouse (1 wood per 60s), paused without warehouse/forest or if warehouse is full
-        if (warehousesRef.current.size > 0) {
-          for (let idx = 0; idx < cells.length; idx++) {
-            if (cells[idx] !== 6) continue; // lumbermill
+        // Production: Lumbermill -> nearest Warehouse (1 wood per 60s), stopped without warehouse/forest or if warehouse is full
+        for (let idx = 0; idx < cells.length; idx++) {
+          if (cells[idx] !== 6) continue; // lumbermill
 
-            const x = idx % cols;
-            const y = (idx / cols) | 0;
+          const x = idx % cols;
+          const y = (idx / cols) | 0;
 
-            if (!hasAdjacentForest(x, y)) continue;
+          const hasForestAdj = hasAdjacentForest(x, y);
+          const nearest = findNearestWarehouseIndex(x, y);
+          const store = nearest !== null ? warehousesRef.current.get(nearest) ?? emptyEconomyState() : null;
 
-            const nearest = findNearestWarehouseIndex(x, y);
-            if (nearest === null) continue;
+          const v = gridRef.current.cells[idx] ?? 0;
+          const req = requiredWorkersForCell(v);
+          const assigned = workersAssignedRef.current.get(idx) ?? 0;
+          const efficiency = req > 0 ? Math.min(1, assigned / req) : 1;
 
-            const store = warehousesRef.current.get(nearest) ?? emptyEconomyState();
-            const total = totalStored(store);
-            if (total >= WAREHOUSE_CAPACITY) continue; // full
+          const prev = lumbermillProgressRef.current.get(idx) ?? 0;
 
-            const prev = lumbermillProgressRef.current.get(idx) ?? 0;
-            const assigned = workersAssignedRef.current.get(idx) ?? 0;
-            const k = Math.min(1, assigned / WORKERS_LUMBERMILL);
-            if (k <= 0) continue;
+          const res = stepProduction({
+            dtMs: 1000,
+            progressMs: prev,
+            efficiency,
+            recipe: LUMBERMILL_RECIPE,
+            placementOk: hasForestAdj,
+            warehouse: store,
+            capacity: WAREHOUSE_CAPACITY,
+          });
 
-            let next = prev + 1000 * k;
-
-            if (next >= LUMBERMILL_WOOD_TIME_MS) {
-              const canAdd = WAREHOUSE_CAPACITY - total;
-              const make = Math.min(Math.floor(next / LUMBERMILL_WOOD_TIME_MS), canAdd);
-              if (make > 0) {
-                storeToWarehouse(store, "wood", make, WAREHOUSE_CAPACITY);
-                warehousesRef.current.set(nearest, store);
-                next -= make * LUMBERMILL_WOOD_TIME_MS;
-              } else {
-                // can't add (warehouse full), pause
-                next = prev;
-              }
-            }
-
-            lumbermillProgressRef.current.set(idx, next);
+          if (nearest !== null && res.nextWarehouse) {
+            warehousesRef.current.set(nearest, res.nextWarehouse);
           }
+
+          lumbermillProgressRef.current.set(idx, res.nextProgressMs);
         }
 
         // Update HUD economy as sum of all warehouses

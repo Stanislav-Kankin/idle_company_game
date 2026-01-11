@@ -15,6 +15,15 @@ export type ResourceId = "wood" | "clay" | "grain" | "meat" | "fish";
 
 export type EconomyState = Record<ResourceId, number>;
 
+export type ProductionBlockReason = "no_workers" | "no_warehouse" | "warehouse_full" | "bad_placement" | "no_inputs";
+
+export type ProductionRecipe = {
+  durationMs: number;
+  inputs?: Partial<Record<ResourceId, number>>;
+  outputs: Partial<Record<ResourceId, number>>;
+};
+
+
 // --- Building inspectors (non-house) ---
 
 export type MarketSlotId = "food" | "furniture" | "pottery" | "wine" | "other";
@@ -28,6 +37,7 @@ export type WarehouseInfo = {
   workersRequired: number;
   workersAssigned: number;
   workersNearby: number;
+  efficiency: number; // 0..1
   capacity: number;
   total: number;
   stored: EconomyState;
@@ -40,6 +50,7 @@ export type MarketInfo = {
   workersRequired: number;
   workersAssigned: number;
   workersNearby: number;
+  efficiency: number; // 0..1
   capacity: number;
   total: number;
   slotMax: number;
@@ -56,6 +67,8 @@ export type LumbermillInfo = {
   hasForestAdj: boolean;
   hasWarehouse: boolean;
   progress01: number; // 0..1
+  efficiency: number; // 0..1
+  blocked: ProductionBlockReason[];
   secondsToNext: number;
 };
 

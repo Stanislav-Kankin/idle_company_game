@@ -70,6 +70,13 @@ const dict = {
     efficiency: "Эффективность",
     noWorkers: "нет рабочих",
 
+    stopped: "Остановлено",
+    blocked: "Причины",
+    noWarehouse: "нет склада",
+    warehouseFull: "склад заполнен",
+    badPlacement: "неподходящее место",
+    noInputs: "нет входных ресурсов",
+
     slot_food: "Еда",
     slot_furniture: "Мебель",
     slot_pottery: "Посуда",
@@ -141,6 +148,13 @@ const dict = {
     workersNearby: "Nearby",
     efficiency: "Efficiency",
     noWorkers: "no workers",
+
+    stopped: "Stopped",
+    blocked: "Reasons",
+    noWarehouse: "no warehouse",
+    warehouseFull: "warehouse full",
+    badPlacement: "bad placement",
+    noInputs: "no input resources",
 
     slot_food: "Food",
     slot_furniture: "Furniture",

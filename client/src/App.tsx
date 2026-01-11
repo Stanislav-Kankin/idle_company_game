@@ -409,7 +409,7 @@ export default function App() {
               </div>
               {hoverBuilding.workersRequired > 0 ? (
                 <div style={{ opacity: 0.9, marginTop: 6, fontSize: 13 }}>
-                  {t("workers")}: <b>{hoverBuilding.workersAssigned}/{hoverBuilding.workersRequired}</b> • {t("workersNearby")}: <b>{hoverBuilding.workersNearby}</b> • {t("efficiency")}: <b>{Math.round((hoverBuilding.workersAssigned / Math.max(1, hoverBuilding.workersRequired)) * 100)}%</b>
+                  {t("workers")}: <b>{hoverBuilding.workersAssigned}/{hoverBuilding.workersRequired}</b> • {t("workersNearby")}: <b>{hoverBuilding.workersNearby}</b> • {t("efficiency")}: <b>{Math.round((hoverBuilding.efficiency ?? 0) * 100)}%</b>
                 </div>
               ) : null}
               <div style={{ opacity: 0.9, marginTop: 6, fontSize: 13 }}>
@@ -431,7 +431,7 @@ export default function App() {
               </div>
               {hoverBuilding.workersRequired > 0 ? (
                 <div style={{ opacity: 0.9, marginTop: 6, fontSize: 13 }}>
-                  {t("workers")}: <b>{hoverBuilding.workersAssigned}/{hoverBuilding.workersRequired}</b> • {t("workersNearby")}: <b>{hoverBuilding.workersNearby}</b> • {t("efficiency")}: <b>{Math.round((hoverBuilding.workersAssigned / Math.max(1, hoverBuilding.workersRequired)) * 100)}%</b>
+                  {t("workers")}: <b>{hoverBuilding.workersAssigned}/{hoverBuilding.workersRequired}</b> • {t("workersNearby")}: <b>{hoverBuilding.workersNearby}</b> • {t("efficiency")}: <b>{Math.round((hoverBuilding.efficiency ?? 0) * 100)}%</b>
                 </div>
               ) : null}
               <div style={{ opacity: 0.9, marginTop: 6, fontSize: 13 }}>
@@ -453,15 +453,37 @@ export default function App() {
               </div>
               {hoverBuilding.workersRequired > 0 ? (
                 <div style={{ opacity: 0.9, marginTop: 6, fontSize: 13 }}>
-                  {t("workers")}: <b>{hoverBuilding.workersAssigned}/{hoverBuilding.workersRequired}</b> • {t("workersNearby")}: <b>{hoverBuilding.workersNearby}</b> • {t("efficiency")}: <b>{Math.round((hoverBuilding.workersAssigned / Math.max(1, hoverBuilding.workersRequired)) * 100)}%</b>
+                  {t("workers")}: <b>{hoverBuilding.workersAssigned}/{hoverBuilding.workersRequired}</b> • {t("workersNearby")}: <b>{hoverBuilding.workersNearby}</b> • {t("efficiency")}: <b>{Math.round((hoverBuilding.efficiency ?? 0) * 100)}%</b>
                 </div>
               ) : null}
               <div style={{ opacity: 0.9, marginTop: 6, fontSize: 13 }}>
                 {t("forestAdj")}: <b>{hoverBuilding.hasForestAdj ? t("yes") : t("no")}</b> • {t("warehousePresent")}: <b>{hoverBuilding.hasWarehouse ? t("yes") : t("no")}</b>
               </div>
               <div style={{ opacity: 0.9, marginTop: 2, fontSize: 13 }}>
-                {t("progress")}: <b>{Math.round(hoverBuilding.progress01 * 100)}%</b> • {t("secondsToNext")}: <b>{hoverBuilding.secondsToNext >= 0 ? `${hoverBuilding.secondsToNext}s` : t("noWorkers")}</b>
+                {t("progress")}: <b>{Math.round(hoverBuilding.progress01 * 100)}%</b> • {t("secondsToNext")}: <b>{hoverBuilding.blocked?.length ? t("stopped") : hoverBuilding.secondsToNext >= 0 ? `${hoverBuilding.secondsToNext}s` : t("stopped")}</b>
               </div>
+              {hoverBuilding.blocked?.length ? (
+                <div style={{ opacity: 0.9, marginTop: 2, fontSize: 13 }}>
+                  {t("blocked")}:{" "}
+                  <b>
+                    {hoverBuilding.blocked
+                      .map((r) =>
+                        t(
+                          r === "no_workers"
+                            ? "noWorkers"
+                            : r === "no_warehouse"
+                              ? "noWarehouse"
+                              : r === "warehouse_full"
+                                ? "warehouseFull"
+                                : r === "bad_placement"
+                                  ? "badPlacement"
+                                  : "noInputs"
+                        )
+                      )
+                      .join(", ")}
+                  </b>
+                </div>
+              ) : null}
             </>
           ) : null}
         </div>
@@ -611,8 +633,30 @@ export default function App() {
                 {t("progress")}: <b>{Math.round(selectedBuilding.progress01 * 100)}%</b>
               </div>
               <div style={{ opacity: 0.92, marginTop: 4, fontSize: 14 }}>
-                {t("secondsToNext")}: <b>{selectedBuilding.secondsToNext >= 0 ? `${selectedBuilding.secondsToNext}s` : t("noWorkers")}</b>
+                {t("secondsToNext")}: <b>{selectedBuilding.blocked?.length ? t("stopped") : selectedBuilding.secondsToNext >= 0 ? `${selectedBuilding.secondsToNext}s` : t("stopped")}</b>
               </div>
+              {selectedBuilding.blocked?.length ? (
+                <div style={{ opacity: 0.9, marginTop: 2, fontSize: 13 }}>
+                  {t("blocked")}:{" "}
+                  <b>
+                    {selectedBuilding.blocked
+                      .map((r) =>
+                        t(
+                          r === "no_workers"
+                            ? "noWorkers"
+                            : r === "no_warehouse"
+                              ? "noWarehouse"
+                              : r === "warehouse_full"
+                                ? "warehouseFull"
+                                : r === "bad_placement"
+                                  ? "badPlacement"
+                                  : "noInputs"
+                        )
+                      )
+                      .join(", ")}
+                  </b>
+                </div>
+              ) : null}
             </>
           ) : null}
         </div>
