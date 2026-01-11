@@ -27,12 +27,17 @@ import {
   WELL_RADIUS,
   type Walker,
 } from "../sim/sim";
+import {
+  WAREHOUSE_CAPACITY,
+  emptyEconomyState,
+  store as storeToWarehouse,
+  totalStored,
+} from "../sim/warehouse";
 import { generateTerrain, isTerrainBlockedForBuilding, TERRAIN } from "../map/terrain";
 import { loadSprites } from "../sprites/loader";
 import type { SpriteSet } from "../sprites/types";
 import type { I18nKey } from "../../i18n";
 
-const WAREHOUSE_CAPACITY = 2000;
 const MARKET_CAPACITY = 50;
 const MARKET_SLOT_MAX = 10;
 
@@ -41,7 +46,7 @@ const LUMBERMILL_WOOD_TIME_MS = 60_000;
 
 // Workforce (Iteration C2)
 const WORKER_RADIUS_TILES = 10;
-const WORKERS_LUMBERMILL = 2;
+const WORKERS_LUMBERMILL = 10;
 const WORKERS_MARKET = 2;
 
 type MinimapPayload = {
@@ -112,7 +117,7 @@ export function GameCanvas(props: {
   const walkersRef = useRef<Walker[]>([]);
 
   // Economy (Iteration C MVP): raw resources; updated by a fixed-step tick.
-  const economyRef = useRef<EconomyState>({ wood: 0, clay: 0, grain: 0, meat: 0, fish: 0 });
+  const economyRef = useRef<EconomyState>(emptyEconomyState());
   const ecoCarryMsRef = useRef<number>(0);
   const lastEcoFrameAtRef = useRef<number | null>(null);
 
@@ -237,14 +242,6 @@ export function GameCanvas(props: {
     return { x, y, level, population, hasRoadAdj, hasWaterPotential, waterServed, foodServed };
   }
 
-  function emptyEco(): EconomyState {
-    return { wood: 0, clay: 0, grain: 0, meat: 0, fish: 0 };
-  }
-
-  function ecoTotal(e: EconomyState): number {
-    return (e.wood ?? 0) + (e.clay ?? 0) + (e.grain ?? 0) + (e.meat ?? 0) + (e.fish ?? 0);
-  }
-
   function emptyMarketSlots(): MarketSlots {
     return { food: 0, furniture: 0, pottery: 0, wine: 0, other: 0 };
   }
@@ -256,7 +253,7 @@ export function GameCanvas(props: {
     for (let i = 0; i < cells.length; i++) {
       const v = cells[i];
       if (v === 5) {
-        if (!warehousesRef.current.has(i)) warehousesRef.current.set(i, emptyEco());
+        if (!warehousesRef.current.has(i)) warehousesRef.current.set(i, emptyEconomyState());
       } else if (v === 4) {
         if (!marketsRef.current.has(i)) marketsRef.current.set(i, emptyMarketSlots());
       } else if (v === 6) {
@@ -388,7 +385,7 @@ export function GameCanvas(props: {
     syncBuildingStateFromGrid();
 
     if (ct === "warehouse") {
-      const stored = warehousesRef.current.get(i) ?? emptyEco();
+      const stored = warehousesRef.current.get(i) ?? emptyEconomyState();
       const v = gridRef.current.cells[i] ?? 0;
       const req = requiredWorkersForCell(v);
       const assigned = workersAssignedRef.current.get(i) ?? 0;
@@ -401,7 +398,7 @@ export function GameCanvas(props: {
         workersAssigned: assigned,
         workersNearby: nearby,
         capacity: WAREHOUSE_CAPACITY,
-        total: ecoTotal(stored),
+        total: totalStored(stored),
         stored: { ...stored },
       };
     }
@@ -591,7 +588,7 @@ export function GameCanvas(props: {
 
           setCell(gridRef.current, tile.x, tile.y, "warehouse");
           const i = tile.y * gridRef.current.cols + tile.x;
-          warehousesRef.current.set(i, emptyEco());
+          warehousesRef.current.set(i, emptyEconomyState());
           return;
         }
 
@@ -688,8 +685,8 @@ export function GameCanvas(props: {
             const nearest = findNearestWarehouseIndex(x, y);
             if (nearest === null) continue;
 
-            const store = warehousesRef.current.get(nearest) ?? emptyEco();
-            const total = ecoTotal(store);
+            const store = warehousesRef.current.get(nearest) ?? emptyEconomyState();
+            const total = totalStored(store);
             if (total >= WAREHOUSE_CAPACITY) continue; // full
 
             const prev = lumbermillProgressRef.current.get(idx) ?? 0;
@@ -703,7 +700,7 @@ export function GameCanvas(props: {
               const canAdd = WAREHOUSE_CAPACITY - total;
               const make = Math.min(Math.floor(next / LUMBERMILL_WOOD_TIME_MS), canAdd);
               if (make > 0) {
-                store.wood += make;
+                storeToWarehouse(store, "wood", make, WAREHOUSE_CAPACITY);
                 warehousesRef.current.set(nearest, store);
                 next -= make * LUMBERMILL_WOOD_TIME_MS;
               } else {
@@ -717,7 +714,7 @@ export function GameCanvas(props: {
         }
 
         // Update HUD economy as sum of all warehouses
-        const sum = emptyEco();
+        const sum = emptyEconomyState();
         for (const store of warehousesRef.current.values()) {
           sum.wood += store.wood ?? 0;
           sum.clay += store.clay ?? 0;
