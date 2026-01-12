@@ -60,6 +60,9 @@ const dict = {
     meat: "Мясо",
     fish: "Рыба",
     pottery: "Посуда",
+    furniture: "Мебель",
+    milk: "Молоко",
+    beef: "Говядина",
 
     requiresForestAdj: "Нужен лес рядом",
     requiresRoadAdj: "Нужна дорога рядом",
@@ -150,6 +153,9 @@ const dict = {
     meat: "Meat",
     fish: "Fish",
     pottery: "Pottery",
+    furniture: "Furniture",
+    milk: "Milk",
+    beef: "Beef",
 
     requiresForestAdj: "Needs adjacent forest",
     requiresRoadAdj: "Needs adjacent road",
