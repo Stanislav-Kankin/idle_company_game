@@ -10,6 +10,7 @@ import {
   type BuildingInfo,
   type CityStats,
   type EconomyState,
+  type ResourceId,
   type Grid,
   type HouseInfo,
   type MarketSlots,
@@ -55,12 +56,17 @@ const CLAY_QUARRY_RECIPE: ProductionRecipe = { durationMs: CLAY_QUARRY_TIME_MS, 
 const POTTERY_TIME_MS = 270_000;
 const POTTERY_RECIPE: ProductionRecipe = { durationMs: POTTERY_TIME_MS, inputs: { clay: 4 }, outputs: { pottery: 1 } };
 
+// Furniture Factory: 3 wood -> 1 furniture per 5 minutes
+const FURNITURE_FACTORY_TIME_MS = 300_000;
+const FURNITURE_FACTORY_RECIPE: ProductionRecipe = { durationMs: FURNITURE_FACTORY_TIME_MS, inputs: { wood: 3 }, outputs: { furniture: 1 } };
+
 // Workforce (Iteration C2)
 const WORKER_RADIUS_TILES = 10;
 const WORKERS_LUMBERMILL = 10;
 const WORKERS_MARKET = 2;
 const WORKERS_CLAY_QUARRY = 8;
 const WORKERS_POTTERY = 10;
+const WORKERS_FURNITURE_FACTORY = 12;
 
 type MinimapPayload = {
   cols: number;
@@ -140,6 +146,7 @@ export function GameCanvas(props: {
   const lumbermillProgressRef = useRef<Map<number, number>>(new Map()); // ms
   const clayQuarryProgressRef = useRef<Map<number, number>>(new Map()); // ms
   const potteryProgressRef = useRef<Map<number, number>>(new Map()); // ms
+  const furnitureFactoryProgressRef = useRef<Map<number, number>>(new Map()); // ms
 
   // Workforce assignment (recomputed periodically)
   const workersAssignedRef = useRef<Map<number, number>>(new Map());
@@ -277,6 +284,8 @@ export function GameCanvas(props: {
         if (!clayQuarryProgressRef.current.has(i)) clayQuarryProgressRef.current.set(i, 0);
       } else if (v === 8) {
         if (!potteryProgressRef.current.has(i)) potteryProgressRef.current.set(i, 0);
+      } else if (v === 9) {
+        if (!furnitureFactoryProgressRef.current.has(i)) furnitureFactoryProgressRef.current.set(i, 0);
       }
     }
 
@@ -296,13 +305,16 @@ export function GameCanvas(props: {
     for (const k of Array.from(potteryProgressRef.current.keys())) {
       if (cells[k] !== 8) potteryProgressRef.current.delete(k);
     }
+    for (const k of Array.from(furnitureFactoryProgressRef.current.keys())) {
+      if (cells[k] !== 9) furnitureFactoryProgressRef.current.delete(k);
+    }
 
     // Keep workforce maps only for active buildings that require workers.
     for (const k of Array.from(workersAssignedRef.current.keys())) {
-      if (cells[k] !== 4 && cells[k] !== 5 && cells[k] !== 6 && cells[k] !== 7 && cells[k] !== 8) workersAssignedRef.current.delete(k);
+      if (cells[k] !== 4 && cells[k] !== 5 && cells[k] !== 6 && cells[k] !== 7 && cells[k] !== 8 && cells[k] !== 9) workersAssignedRef.current.delete(k);
     }
     for (const k of Array.from(workersNearbyRef.current.keys())) {
-      if (cells[k] !== 4 && cells[k] !== 5 && cells[k] !== 6 && cells[k] !== 7 && cells[k] !== 8) workersNearbyRef.current.delete(k);
+      if (cells[k] !== 4 && cells[k] !== 5 && cells[k] !== 6 && cells[k] !== 7 && cells[k] !== 8 && cells[k] !== 9) workersNearbyRef.current.delete(k);
     }
   }
 
@@ -311,13 +323,13 @@ export function GameCanvas(props: {
     if (v === 4) return WORKERS_MARKET;
     if (v === 7) return WORKERS_CLAY_QUARRY;
     if (v === 8) return WORKERS_POTTERY;
+    if (v === 9) return WORKERS_FURNITURE_FACTORY;
     return 0;
   }
 
   function recomputeWorkforce(now: number): void {
     // Build house worker pool
     const cols = gridRef.current.cols;
-    const rows = gridRef.current.rows;
     const cells = gridRef.current.cells;
 
     type HousePool = { idx: number; x: number; y: number; total: number; remain: number };
@@ -402,9 +414,75 @@ export function GameCanvas(props: {
     return best;
   }
 
+
+  function warehouseHasInputs(store: EconomyState, inputs: ProductionRecipe["inputs"]): boolean {
+    if (!inputs) return true;
+    for (const k of Object.keys(inputs)) {
+      const need = (inputs as any)[k] ?? 0;
+      if (need <= 0) continue;
+      const have = (store as any)[k] ?? 0;
+      if (have < need) return false;
+    }
+    return true;
+  }
+
+  function findNearestWarehouseIndexWithInputs(x: number, y: number, inputs: ProductionRecipe["inputs"]): number | null {
+    // Prefer a warehouse that has the needed inputs (if any).
+    if (!inputs) return findNearestWarehouseIndex(x, y);
+
+    let best: number | null = null;
+    let bestDist = Number.POSITIVE_INFINITY;
+    const cols = gridRef.current.cols;
+
+    for (const idx of warehousesRef.current.keys()) {
+      const store = warehousesRef.current.get(idx);
+      if (!store) continue;
+      if (!warehouseHasInputs(store, inputs)) continue;
+
+      const wx = idx % cols;
+      const wy = (idx / cols) | 0;
+      const d = Math.abs(wx - x) + Math.abs(wy - y);
+      if (d < bestDist) {
+        bestDist = d;
+        best = idx;
+      }
+    }
+
+    return best ?? findNearestWarehouseIndex(x, y);
+  }
+
+
+  function findPreferredWarehouseIndexForOutput(x: number, y: number, resource: ResourceId): number | null {
+    // Concentrate outputs into a warehouse that already has more of the given resource (helps inputs-based buildings start working).
+    // Tie-breaker: nearer warehouse. Fallback: nearest warehouse.
+    let best: number | null = null;
+    let bestAmt = -1;
+    let bestDist = Number.POSITIVE_INFINITY;
+    const cols = gridRef.current.cols;
+
+    for (const idx of warehousesRef.current.keys()) {
+      const store = warehousesRef.current.get(idx);
+      if (!store) continue;
+      if (totalStored(store) >= WAREHOUSE_CAPACITY) continue; // completely full
+
+      const amt = store[resource] ?? 0;
+      const wx = idx % cols;
+      const wy = (idx / cols) | 0;
+      const d = Math.abs(wx - x) + Math.abs(wy - y);
+
+      if (amt > bestAmt || (amt === bestAmt && d < bestDist)) {
+        bestAmt = amt;
+        bestDist = d;
+        best = idx;
+      }
+    }
+
+    return best ?? findNearestWarehouseIndex(x, y);
+  }
+
   function getBuildingInfoAt(x: number, y: number): BuildingInfo | null {
     const ct = cellTypeAt(gridRef.current, x, y);
-    if (ct !== "warehouse" && ct !== "market" && ct !== "lumbermill" && ct !== "clay_quarry" && ct !== "pottery") return null;
+    if (ct !== "warehouse" && ct !== "market" && ct !== "lumbermill" && ct !== "clay_quarry" && ct !== "pottery" && ct !== "furniture_factory") return null;
 
     const cols = gridRef.current.cols;
     const i = y * cols + x;
@@ -458,7 +536,7 @@ export function GameCanvas(props: {
 
       const blocked: ProductionBlockReason[] = [];
       const hasForestAdj = hasAdjacentForest(x, y);
-      const nearest = findNearestWarehouseIndex(x, y);
+      const nearest = findPreferredWarehouseIndexForOutput(x, y, "wood");
 
       if (req > 0 && assigned <= 0) blocked.push("no_workers");
       if (!hasForestAdj) blocked.push("bad_placement");
@@ -494,7 +572,7 @@ export function GameCanvas(props: {
       const clamped = Math.max(0, Math.min(CLAY_QUARRY_TIME_MS, progressMs));
 
       const blocked: ProductionBlockReason[] = [];
-      const nearest = findNearestWarehouseIndex(x, y);
+      const nearest = findPreferredWarehouseIndexForOutput(x, y, "clay");
 
       if (req > 0 && assigned <= 0) blocked.push("no_workers");
       if (nearest === null) blocked.push("no_warehouse");
@@ -522,36 +600,74 @@ export function GameCanvas(props: {
       };
     }
 
-    // pottery
-    const progressMs = potteryProgressRef.current.get(i) ?? 0;
-    const clamped = Math.max(0, Math.min(POTTERY_TIME_MS, progressMs));
+    if (ct === "pottery") {
+      const progressMs = potteryProgressRef.current.get(i) ?? 0;
+      const clamped = Math.max(0, Math.min(POTTERY_TIME_MS, progressMs));
 
-    const blocked: ProductionBlockReason[] = [];
-    const nearest = findNearestWarehouseIndex(x, y);
+      const blocked: ProductionBlockReason[] = [];
+      const nearest = findPreferredWarehouseIndexForOutput(x, y, "wood");
 
-    if (req > 0 && assigned <= 0) blocked.push("no_workers");
-    if (nearest === null) blocked.push("no_warehouse");
-    else {
-      const store = warehousesRef.current.get(nearest) ?? emptyEconomyState();
-      if ((store.clay ?? 0) < 4) blocked.push("no_inputs");
-      if (totalStored(store) >= WAREHOUSE_CAPACITY) blocked.push("warehouse_full");
+      if (req > 0 && assigned <= 0) blocked.push("no_workers");
+      if (nearest === null) blocked.push("no_warehouse");
+      else {
+        const store = warehousesRef.current.get(nearest) ?? emptyEconomyState();
+        if (!warehouseHasInputs(store, POTTERY_RECIPE.inputs)) blocked.push("no_inputs");
+        if (totalStored(store) >= WAREHOUSE_CAPACITY) blocked.push("warehouse_full");
+      }
+
+      const secondsToNext =
+        blocked.length === 0 && efficiency > 0
+          ? Math.ceil(Math.max(0, (POTTERY_TIME_MS - clamped) / (1000 * efficiency)))
+          : -1;
+
+      return {
+        kind: "pottery",
+        x,
+        y,
+        workersRequired: req,
+        workersAssigned: assigned,
+        workersNearby: nearby,
+        progress01: clamped / POTTERY_TIME_MS,
+        efficiency,
+        blocked,
+        secondsToNext,
+      };
     }
 
-    const secondsToNext =
-      blocked.length === 0 && efficiency > 0 ? Math.ceil(Math.max(0, (POTTERY_TIME_MS - clamped) / (1000 * efficiency))) : -1;
+    // furniture factory
+    {
+      const progressMs = furnitureFactoryProgressRef.current.get(i) ?? 0;
+      const clamped = Math.max(0, Math.min(FURNITURE_FACTORY_TIME_MS, progressMs));
 
-    return {
-      kind: "pottery",
-      x,
-      y,
-      workersRequired: req,
-      workersAssigned: assigned,
-      workersNearby: nearby,
-      progress01: clamped / POTTERY_TIME_MS,
-      efficiency,
-      blocked,
-      secondsToNext,
-    };
+      const blocked: ProductionBlockReason[] = [];
+      const nearest = findNearestWarehouseIndexWithInputs(x, y, FURNITURE_FACTORY_RECIPE.inputs);
+
+      if (req > 0 && assigned <= 0) blocked.push("no_workers");
+      if (nearest === null) blocked.push("no_warehouse");
+      else {
+        const store = warehousesRef.current.get(nearest) ?? emptyEconomyState();
+        if (!warehouseHasInputs(store, FURNITURE_FACTORY_RECIPE.inputs)) blocked.push("no_inputs");
+        if (totalStored(store) >= WAREHOUSE_CAPACITY) blocked.push("warehouse_full");
+      }
+
+      const secondsToNext =
+        blocked.length === 0 && efficiency > 0
+          ? Math.ceil(Math.max(0, (FURNITURE_FACTORY_TIME_MS - clamped) / (1000 * efficiency)))
+          : -1;
+
+      return {
+        kind: "furniture_factory",
+        x,
+        y,
+        workersRequired: req,
+        workersAssigned: assigned,
+        workersNearby: nearby,
+        progress01: clamped / FURNITURE_FACTORY_TIME_MS,
+        efficiency,
+        blocked,
+        secondsToNext,
+      };
+    }
   }
 
   function isBlockedByTerrain(x: number, y: number): boolean {
@@ -615,7 +731,7 @@ export function GameCanvas(props: {
         }
 
         // Tap other buildings -> open inspector (unless bulldoze)
-        if ((current === "warehouse" || current === "market" || current === "lumbermill" || current === "clay_quarry" || current === "pottery") && t !== "bulldoze") {
+        if ((current === "warehouse" || current === "market" || current === "lumbermill" || current === "clay_quarry" || current === "pottery" || current === "furniture_factory") && t !== "bulldoze") {
           const info = getBuildingInfoAt(tile.x, tile.y);
           onBuildingSelectRef.current?.(info);
           onHouseSelectRef.current?.(null);
@@ -643,6 +759,7 @@ export function GameCanvas(props: {
           if (current === "lumbermill") lumbermillProgressRef.current.delete(i);
           if (current === "clay_quarry") clayQuarryProgressRef.current.delete(i);
           if (current === "pottery") potteryProgressRef.current.delete(i);
+          if (current === "furniture_factory") furnitureFactoryProgressRef.current.delete(i);
 
           return;
         }
@@ -752,6 +869,22 @@ if (t === "pottery") {
   return;
 }
 
+
+        if (t === "furniture_factory") {
+          if (!hasAdjacentRoad(gridRef.current, tile.x, tile.y)) {
+            notifyKeyRef.current?.("requiresRoadAdj");
+            return;
+          }
+
+          const cost = buildCostsRef.current.furniture_factory ?? 0;
+          if (!trySpendRef.current(cost)) return;
+
+          setCell(gridRef.current, tile.x, tile.y, "furniture_factory");
+          const i = tile.y * gridRef.current.cols + tile.x;
+          furnitureFactoryProgressRef.current.set(i, 0);
+          return;
+        }
+
         if (t === "road") {
           const cost = buildCostsRef.current.road ?? 0;
           if (!trySpendRef.current(cost)) return;
@@ -820,7 +953,7 @@ if (t === "pottery") {
           const y = (idx / cols) | 0;
 
           const hasForestAdj = hasAdjacentForest(x, y);
-          const nearest = findNearestWarehouseIndex(x, y);
+          const nearest = findPreferredWarehouseIndexForOutput(x, y, "clay");
           const store = nearest !== null ? warehousesRef.current.get(nearest) ?? emptyEconomyState() : null;
 
           const v = gridRef.current.cells[idx] ?? 0;
@@ -854,7 +987,7 @@ if (t === "pottery") {
           const x = idx % cols;
           const y = (idx / cols) | 0;
 
-          const nearest = findNearestWarehouseIndex(x, y);
+          const nearest = findNearestWarehouseIndexWithInputs(x, y, POTTERY_RECIPE.inputs);
           const store = nearest !== null ? warehousesRef.current.get(nearest) ?? emptyEconomyState() : null;
 
           const v = gridRef.current.cells[idx] ?? 0;
@@ -888,7 +1021,7 @@ if (t === "pottery") {
           const x = idx % cols;
           const y = (idx / cols) | 0;
 
-          const nearest = findNearestWarehouseIndex(x, y);
+          const nearest = findNearestWarehouseIndexWithInputs(x, y, POTTERY_RECIPE.inputs);
           const store = nearest !== null ? warehousesRef.current.get(nearest) ?? emptyEconomyState() : null;
 
           const v = gridRef.current.cells[idx] ?? 0;
@@ -915,6 +1048,40 @@ if (t === "pottery") {
           potteryProgressRef.current.set(idx, res.nextProgressMs);
         }
 
+        // Production: Furniture Factory -> nearest Warehouse (3 wood -> 1 furniture per 300s)
+        for (let idx = 0; idx < cells.length; idx++) {
+          if (cells[idx] !== 9) continue; // furniture factory
+
+          const x = idx % cols;
+          const y = (idx / cols) | 0;
+
+          const nearest = findNearestWarehouseIndexWithInputs(x, y, FURNITURE_FACTORY_RECIPE.inputs);
+          const store = nearest !== null ? warehousesRef.current.get(nearest) ?? emptyEconomyState() : null;
+
+          const v = gridRef.current.cells[idx] ?? 0;
+          const req = requiredWorkersForCell(v);
+          const assigned = workersAssignedRef.current.get(idx) ?? 0;
+          const efficiency = req > 0 ? Math.min(1, assigned / req) : 1;
+
+          const prev = furnitureFactoryProgressRef.current.get(idx) ?? 0;
+
+          const res = stepProduction({
+            dtMs: 1000,
+            progressMs: prev,
+            efficiency,
+            recipe: FURNITURE_FACTORY_RECIPE,
+            placementOk: true,
+            warehouse: store,
+            capacity: WAREHOUSE_CAPACITY,
+          });
+
+          if (nearest !== null && res.nextWarehouse) {
+            warehousesRef.current.set(nearest, res.nextWarehouse);
+          }
+
+          furnitureFactoryProgressRef.current.set(idx, res.nextProgressMs);
+        }
+
         // Update HUD economy as sum of all warehouses
         const sum = emptyEconomyState();
         for (const store of warehousesRef.current.values()) {
@@ -924,6 +1091,7 @@ if (t === "pottery") {
           sum.meat += store.meat ?? 0;
           sum.fish += store.fish ?? 0;
           sum.pottery += store.pottery ?? 0;
+          sum.furniture += store.furniture ?? 0;
         }
         economyRef.current = sum;
       }

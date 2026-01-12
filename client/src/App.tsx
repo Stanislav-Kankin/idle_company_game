@@ -476,6 +476,37 @@ export default function App() {
                 </div>
               ) : null}
 
+              <div style={{ opacity: 0.9, marginTop: 6, fontSize: 13 }}>
+                {t("forestAdj")}: <b>{hoverBuilding.hasForestAdj ? t("yes") : t("no")}</b> • {t("warehousePresent")}: <b>{hoverBuilding.hasWarehouse ? t("yes") : t("no")}</b>
+              </div>
+              <div style={{ opacity: 0.9, marginTop: 2, fontSize: 13 }}>
+                {t("progress")}: <b>{Math.round(hoverBuilding.progress01 * 100)}%</b> • {t("secondsToNext")}: <b>{hoverBuilding.blocked?.length ? t("stopped") : hoverBuilding.secondsToNext >= 0 ? `${hoverBuilding.secondsToNext}s` : t("stopped")}</b>
+              </div>
+              {hoverBuilding.blocked?.length ? (
+                <div style={{ opacity: 0.9, marginTop: 2, fontSize: 13 }}>
+                  {t("blocked")}:{" "}
+                  <b>
+                    {hoverBuilding.blocked
+                      .map((r) =>
+                        t(
+                          r === "no_workers"
+                            ? "noWorkers"
+                            : r === "no_warehouse"
+                              ? "noWarehouse"
+                              : r === "warehouse_full"
+                                ? "warehouseFull"
+                                : r === "bad_placement"
+                                  ? "badPlacement"
+                                  : "noInputs"
+                        )
+                      )
+                      .join(", ")}
+                  </b>
+                </div>
+              ) : null}
+            </>
+          ) : null}
+
 {hoverBuilding.kind === "clay_quarry" ? (
   <>
     <div style={{ fontWeight: 900 }}>
@@ -553,36 +584,7 @@ export default function App() {
     ) : null}
   </>
 ) : null}
-              <div style={{ opacity: 0.9, marginTop: 6, fontSize: 13 }}>
-                {t("forestAdj")}: <b>{hoverBuilding.hasForestAdj ? t("yes") : t("no")}</b> • {t("warehousePresent")}: <b>{hoverBuilding.hasWarehouse ? t("yes") : t("no")}</b>
-              </div>
-              <div style={{ opacity: 0.9, marginTop: 2, fontSize: 13 }}>
-                {t("progress")}: <b>{Math.round(hoverBuilding.progress01 * 100)}%</b> • {t("secondsToNext")}: <b>{hoverBuilding.blocked?.length ? t("stopped") : hoverBuilding.secondsToNext >= 0 ? `${hoverBuilding.secondsToNext}s` : t("stopped")}</b>
-              </div>
-              {hoverBuilding.blocked?.length ? (
-                <div style={{ opacity: 0.9, marginTop: 2, fontSize: 13 }}>
-                  {t("blocked")}:{" "}
-                  <b>
-                    {hoverBuilding.blocked
-                      .map((r) =>
-                        t(
-                          r === "no_workers"
-                            ? "noWorkers"
-                            : r === "no_warehouse"
-                              ? "noWarehouse"
-                              : r === "warehouse_full"
-                                ? "warehouseFull"
-                                : r === "bad_placement"
-                                  ? "badPlacement"
-                                  : "noInputs"
-                        )
-                      )
-                      .join(", ")}
-                  </b>
-                </div>
-              ) : null}
-            </>
-          ) : null}
+
         </div>
       ) : null}
 
@@ -726,6 +728,43 @@ export default function App() {
                 </div>
               ) : null}
 
+              <div style={{ opacity: 0.92, marginTop: 8, fontSize: 14 }}>
+                {t("forestAdj")}: <b>{selectedBuilding.hasForestAdj ? t("yes") : t("no")}</b>
+              </div>
+              <div style={{ opacity: 0.92, marginTop: 4, fontSize: 14 }}>
+                {t("warehousePresent")}: <b>{selectedBuilding.hasWarehouse ? t("yes") : t("no")}</b>
+              </div>
+              <div style={{ opacity: 0.92, marginTop: 4, fontSize: 14 }}>
+                {t("progress")}: <b>{Math.round(selectedBuilding.progress01 * 100)}%</b>
+              </div>
+              <div style={{ opacity: 0.92, marginTop: 4, fontSize: 14 }}>
+                {t("secondsToNext")}: <b>{selectedBuilding.blocked?.length ? t("stopped") : selectedBuilding.secondsToNext >= 0 ? `${selectedBuilding.secondsToNext}s` : t("stopped")}</b>
+              </div>
+              {selectedBuilding.blocked?.length ? (
+                <div style={{ opacity: 0.9, marginTop: 2, fontSize: 13 }}>
+                  {t("blocked")}:{" "}
+                  <b>
+                    {selectedBuilding.blocked
+                      .map((r) =>
+                        t(
+                          r === "no_workers"
+                            ? "noWorkers"
+                            : r === "no_warehouse"
+                              ? "noWarehouse"
+                              : r === "warehouse_full"
+                                ? "warehouseFull"
+                                : r === "bad_placement"
+                                  ? "badPlacement"
+                                  : "noInputs"
+                        )
+                      )
+                      .join(", ")}
+                  </b>
+                </div>
+              ) : null}
+            </>
+          ) : null}
+
 {selectedBuilding.kind === "clay_quarry" ? (
   <>
     {selectedBuilding.workersRequired > 0 ? (
@@ -809,42 +848,7 @@ export default function App() {
     ) : null}
   </>
 ) : null}
-              <div style={{ opacity: 0.92, marginTop: 8, fontSize: 14 }}>
-                {t("forestAdj")}: <b>{selectedBuilding.hasForestAdj ? t("yes") : t("no")}</b>
-              </div>
-              <div style={{ opacity: 0.92, marginTop: 4, fontSize: 14 }}>
-                {t("warehousePresent")}: <b>{selectedBuilding.hasWarehouse ? t("yes") : t("no")}</b>
-              </div>
-              <div style={{ opacity: 0.92, marginTop: 4, fontSize: 14 }}>
-                {t("progress")}: <b>{Math.round(selectedBuilding.progress01 * 100)}%</b>
-              </div>
-              <div style={{ opacity: 0.92, marginTop: 4, fontSize: 14 }}>
-                {t("secondsToNext")}: <b>{selectedBuilding.blocked?.length ? t("stopped") : selectedBuilding.secondsToNext >= 0 ? `${selectedBuilding.secondsToNext}s` : t("stopped")}</b>
-              </div>
-              {selectedBuilding.blocked?.length ? (
-                <div style={{ opacity: 0.9, marginTop: 2, fontSize: 13 }}>
-                  {t("blocked")}:{" "}
-                  <b>
-                    {selectedBuilding.blocked
-                      .map((r) =>
-                        t(
-                          r === "no_workers"
-                            ? "noWorkers"
-                            : r === "no_warehouse"
-                              ? "noWarehouse"
-                              : r === "warehouse_full"
-                                ? "warehouseFull"
-                                : r === "bad_placement"
-                                  ? "badPlacement"
-                                  : "noInputs"
-                        )
-                      )
-                      .join(", ")}
-                  </b>
-                </div>
-              ) : null}
-            </>
-          ) : null}
+
         </div>
       ) : null}
     </div>
