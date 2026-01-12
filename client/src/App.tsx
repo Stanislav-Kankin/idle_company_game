@@ -40,7 +40,7 @@ export default function App() {
   const [stats, setStats] = useState<CityStats | null>(null);
 
   // Economy (resources live in sim; money still UI-owned for now)
-  const [economy, setEconomy] = useState<EconomyState>({ wood: 0, clay: 0, grain: 0, meat: 0, fish: 0, pottery: 0 });
+  const [economy, setEconomy] = useState<EconomyState>({ wood: 0, clay: 0, grain: 0, meat: 0, fish: 0, pottery: 0, furniture: 0, milk: 0, beef: 0 });
 
   // Экономика (пока клиентская, позже перенесём на сервер)
   const [money, setMoney] = useState<number>(START_MONEY);
@@ -65,6 +65,11 @@ export default function App() {
       lumbermill: 150,
       clay_quarry: 140,
       pottery: 160,
+      furniture_factory: 180,
+      farm_chicken: 140,
+      farm_pig: 170,
+      farm_fish: 180,
+      farm_cow: 220,
       bulldoze: 30,
     }),
     []
@@ -81,6 +86,11 @@ export default function App() {
       lumbermill: t("tool_lumbermill"),
       clay_quarry: t("tool_clay_quarry"),
       pottery: t("tool_pottery"),
+      furniture_factory: t("tool_furniture_factory"),
+      farm_chicken: t("tool_farm_chicken"),
+      farm_pig: t("tool_farm_pig"),
+      farm_fish: t("tool_farm_fish"),
+      farm_cow: t("tool_farm_cow"),
       bulldoze: t("tool_bulldoze"),
     }),
     [lang]
@@ -235,6 +245,11 @@ export default function App() {
           <HudChip label={`🪵 ${t("wood")}`} value={economy.wood} />
           <HudChip label={`🧱 ${t("clay")}`} value={economy.clay} />
           <HudChip label={`🏺 ${t("pottery")}`} value={economy.pottery} />
+          <HudChip label={`🪑 ${t("furniture")}`} value={economy.furniture} />
+          <HudChip label={`🥩 ${t("meat")}`} value={economy.meat} />
+          <HudChip label={`🐟 ${t("fish")}`} value={economy.fish} />
+          <HudChip label={`🥛 ${t("milk")}`} value={economy.milk} />
+          <HudChip label={`🍖 ${t("beef")}`} value={economy.beef} />
         </div>
 
         <div style={{ marginLeft: "auto", display: "flex", gap: 10, alignItems: "center" }}>
@@ -360,6 +375,41 @@ export default function App() {
           cost={buildCosts.pottery}
           onClick={() => setTool("pottery")}
         />
+        <ToolBtn
+          active={tool === "furniture_factory"}
+          icon="🪑"
+          title={toolLabel.furniture_factory}
+          cost={buildCosts.furniture_factory}
+          onClick={() => setTool("furniture_factory")}
+        />
+        <ToolBtn
+          active={tool === "farm_chicken"}
+          icon="🐔"
+          title={toolLabel.farm_chicken}
+          cost={buildCosts.farm_chicken}
+          onClick={() => setTool("farm_chicken")}
+        />
+        <ToolBtn
+          active={tool === "farm_pig"}
+          icon="🐷"
+          title={toolLabel.farm_pig}
+          cost={buildCosts.farm_pig}
+          onClick={() => setTool("farm_pig")}
+        />
+        <ToolBtn
+          active={tool === "farm_fish"}
+          icon="🐟"
+          title={toolLabel.farm_fish}
+          cost={buildCosts.farm_fish}
+          onClick={() => setTool("farm_fish")}
+        />
+        <ToolBtn
+          active={tool === "farm_cow"}
+          icon="🐄"
+          title={toolLabel.farm_cow}
+          cost={buildCosts.farm_cow}
+          onClick={() => setTool("farm_cow")}
+        />
         <ToolBtn active={tool === "bulldoze"} icon="🛠️" title={toolLabel.bulldoze} cost={buildCosts.bulldoze} onClick={() => setTool("bulldoze")} />
 
         <div style={{ opacity: 0.75, fontSize: 12, marginTop: 10, lineHeight: 1.35 }}>
@@ -436,6 +486,9 @@ export default function App() {
               </div>
               <div style={{ opacity: 0.9, marginTop: 4, fontSize: 13 }}>
                 🪵 {t("wood")}: <b>{hoverBuilding.stored.wood}</b> • 🧱 {t("clay")}: <b>{hoverBuilding.stored.clay}</b> • 🏺 {t("pottery")}: <b>{hoverBuilding.stored.pottery}</b>
+              </div>
+              <div style={{ opacity: 0.9, marginTop: 2, fontSize: 13 }}>
+                🪑 {t("furniture")}: <b>{hoverBuilding.stored.furniture}</b> • 🥛 {t("milk")}: <b>{hoverBuilding.stored.milk}</b> • 🍖 {t("beef")}: <b>{hoverBuilding.stored.beef}</b>
               </div>
               <div style={{ opacity: 0.9, marginTop: 2, fontSize: 13 }}>
                 🌾 {t("grain")}: <b>{hoverBuilding.stored.grain}</b> • 🥩 {t("meat")}: <b>{hoverBuilding.stored.meat}</b> • 🐟 {t("fish")}: <b>{hoverBuilding.stored.fish}</b>
@@ -556,6 +609,210 @@ export default function App() {
         {t("workers")}: <b>{hoverBuilding.workersAssigned}/{hoverBuilding.workersRequired}</b> • {t("workersNearby")}: <b>{hoverBuilding.workersNearby}</b> • {t("efficiency")}: <b>{Math.round((hoverBuilding.efficiency ?? 0) * 100)}%</b>
       </div>
     ) : null}
+
+{hoverBuilding.kind === "furniture_factory" ? (
+  <>
+    <div style={{ fontWeight: 900 }}>
+      {t("tool_furniture_factory")} • ({hoverBuilding.x},{hoverBuilding.y})
+    </div>
+    {hoverBuilding.workersRequired > 0 ? (
+      <div style={{ opacity: 0.9, marginTop: 6, fontSize: 13 }}>
+        {t("workers")}: <b>{hoverBuilding.workersAssigned}/{hoverBuilding.workersRequired}</b> • {t("workersNearby")}: <b>{hoverBuilding.workersNearby}</b> • {t("efficiency")}: <b>{Math.round((hoverBuilding.efficiency ?? 0) * 100)}%</b>
+      </div>
+    ) : null}
+    <div style={{ opacity: 0.9, marginTop: 6, fontSize: 13 }}>
+      {t("progress")}: <b>{Math.round(hoverBuilding.progress01 * 100)}%</b> • {t("secondsToNext")}:{" "}
+      <b>{hoverBuilding.blocked?.length ? t("stopped") : hoverBuilding.secondsToNext >= 0 ? `${hoverBuilding.secondsToNext}s` : t("stopped")}</b>
+    </div>
+    {hoverBuilding.blocked?.length ? (
+      <div style={{ opacity: 0.9, marginTop: 6, fontSize: 13 }}>
+        {t("blocked")}:{" "}
+        <b>
+          {hoverBuilding.blocked
+            .map((b) =>
+              b === "no_workers"
+                ? t("noWorkers")
+                : b === "no_warehouse"
+                  ? t("noWarehouse")
+                  : b === "warehouse_full"
+                    ? t("warehouseFull")
+                    : b === "bad_placement"
+                      ? t("badPlacement")
+                      : b === "no_inputs"
+                        ? t("noInputs")
+                        : b
+            )
+            .join(", ")}
+        </b>
+      </div>
+    ) : null}
+  </>
+) : null}
+
+{hoverBuilding.kind === "farm_chicken" ? (
+  <>
+    <div style={{ fontWeight: 900 }}>
+      {t("tool_farm_chicken")} • ({hoverBuilding.x},{hoverBuilding.y})
+    </div>
+    {hoverBuilding.workersRequired > 0 ? (
+      <div style={{ opacity: 0.9, marginTop: 6, fontSize: 13 }}>
+        {t("workers")}: <b>{hoverBuilding.workersAssigned}/{hoverBuilding.workersRequired}</b> • {t("workersNearby")}: <b>{hoverBuilding.workersNearby}</b> • {t("efficiency")}: <b>{Math.round((hoverBuilding.efficiency ?? 0) * 100)}%</b>
+      </div>
+    ) : null}
+    <div style={{ opacity: 0.9, marginTop: 6, fontSize: 13 }}>
+      {t("progress")}: <b>{Math.round(hoverBuilding.progress01 * 100)}%</b> • {t("secondsToNext")}:{" "}
+      <b>{hoverBuilding.blocked?.length ? t("stopped") : hoverBuilding.secondsToNext >= 0 ? `${hoverBuilding.secondsToNext}s` : t("stopped")}</b>
+    </div>
+    {hoverBuilding.blocked?.length ? (
+      <div style={{ opacity: 0.9, marginTop: 6, fontSize: 13 }}>
+        {t("blocked")}:{" "}
+        <b>
+          {hoverBuilding.blocked
+            .map((b) =>
+              b === "no_workers"
+                ? t("noWorkers")
+                : b === "no_warehouse"
+                  ? t("noWarehouse")
+                  : b === "warehouse_full"
+                    ? t("warehouseFull")
+                    : b === "bad_placement"
+                      ? t("badPlacement")
+                      : b === "no_inputs"
+                        ? t("noInputs")
+                        : b
+            )
+            .join(", ")}
+        </b>
+      </div>
+    ) : null}
+  </>
+) : null}
+
+{hoverBuilding.kind === "farm_pig" ? (
+  <>
+    <div style={{ fontWeight: 900 }}>
+      {t("tool_farm_pig")} • ({hoverBuilding.x},{hoverBuilding.y})
+    </div>
+    {hoverBuilding.workersRequired > 0 ? (
+      <div style={{ opacity: 0.9, marginTop: 6, fontSize: 13 }}>
+        {t("workers")}: <b>{hoverBuilding.workersAssigned}/{hoverBuilding.workersRequired}</b> • {t("workersNearby")}: <b>{hoverBuilding.workersNearby}</b> • {t("efficiency")}: <b>{Math.round((hoverBuilding.efficiency ?? 0) * 100)}%</b>
+      </div>
+    ) : null}
+    <div style={{ opacity: 0.9, marginTop: 6, fontSize: 13 }}>
+      {t("progress")}: <b>{Math.round(hoverBuilding.progress01 * 100)}%</b> • {t("secondsToNext")}:{" "}
+      <b>{hoverBuilding.blocked?.length ? t("stopped") : hoverBuilding.secondsToNext >= 0 ? `${hoverBuilding.secondsToNext}s` : t("stopped")}</b>
+    </div>
+    {hoverBuilding.blocked?.length ? (
+      <div style={{ opacity: 0.9, marginTop: 6, fontSize: 13 }}>
+        {t("blocked")}:{" "}
+        <b>
+          {hoverBuilding.blocked
+            .map((b) =>
+              b === "no_workers"
+                ? t("noWorkers")
+                : b === "no_warehouse"
+                  ? t("noWarehouse")
+                  : b === "warehouse_full"
+                    ? t("warehouseFull")
+                    : b === "bad_placement"
+                      ? t("badPlacement")
+                      : b === "no_inputs"
+                        ? t("noInputs")
+                        : b
+            )
+            .join(", ")}
+        </b>
+      </div>
+    ) : null}
+  </>
+) : null}
+
+{hoverBuilding.kind === "farm_fish" ? (
+  <>
+    <div style={{ fontWeight: 900 }}>
+      {t("tool_farm_fish")} • ({hoverBuilding.x},{hoverBuilding.y})
+    </div>
+    {hoverBuilding.workersRequired > 0 ? (
+      <div style={{ opacity: 0.9, marginTop: 6, fontSize: 13 }}>
+        {t("workers")}: <b>{hoverBuilding.workersAssigned}/{hoverBuilding.workersRequired}</b> • {t("workersNearby")}: <b>{hoverBuilding.workersNearby}</b> • {t("efficiency")}: <b>{Math.round((hoverBuilding.efficiency ?? 0) * 100)}%</b>
+      </div>
+    ) : null}
+    <div style={{ opacity: 0.9, marginTop: 6, fontSize: 13 }}>
+      {t("waterAdj")}: <b>{hoverBuilding.hasWaterAdj ? t("yes") : t("no")}</b> • {t("fishSpotAdj")}:{" "}
+      <b>{hoverBuilding.hasFishSpotAdj ? t("yes") : t("no")}</b>
+    </div>
+    <div style={{ opacity: 0.9, marginTop: 2, fontSize: 13 }}>
+      {t("progress")}: <b>{Math.round(hoverBuilding.progress01 * 100)}%</b> • {t("secondsToNext")}:{" "}
+      <b>{hoverBuilding.blocked?.length ? t("stopped") : hoverBuilding.secondsToNext >= 0 ? `${hoverBuilding.secondsToNext}s` : t("stopped")}</b>
+    </div>
+    {hoverBuilding.blocked?.length ? (
+      <div style={{ opacity: 0.9, marginTop: 6, fontSize: 13 }}>
+        {t("blocked")}:{" "}
+        <b>
+          {hoverBuilding.blocked
+            .map((b) =>
+              b === "no_workers"
+                ? t("noWorkers")
+                : b === "no_warehouse"
+                  ? t("noWarehouse")
+                  : b === "warehouse_full"
+                    ? t("warehouseFull")
+                    : b === "bad_placement"
+                      ? t("badPlacement")
+                      : b === "no_inputs"
+                        ? t("noInputs")
+                        : b
+            )
+            .join(", ")}
+        </b>
+      </div>
+    ) : null}
+  </>
+) : null}
+
+{hoverBuilding.kind === "farm_cow" ? (
+  <>
+    <div style={{ fontWeight: 900 }}>
+      {t("tool_farm_cow")} • ({hoverBuilding.x},{hoverBuilding.y})
+    </div>
+    {hoverBuilding.workersRequired > 0 ? (
+      <div style={{ opacity: 0.9, marginTop: 6, fontSize: 13 }}>
+        {t("workers")}: <b>{hoverBuilding.workersAssigned}/{hoverBuilding.workersRequired}</b> • {t("workersNearby")}: <b>{hoverBuilding.workersNearby}</b> • {t("efficiency")}: <b>{Math.round((hoverBuilding.efficiency ?? 0) * 100)}%</b>
+      </div>
+    ) : null}
+    <div style={{ opacity: 0.9, marginTop: 6, fontSize: 13 }}>
+      🥛 {t("milk")}: <b>{Math.round(hoverBuilding.milkProgress01 * 100)}%</b> • {t("secondsToNext")}:{" "}
+      <b>{hoverBuilding.blocked?.length ? t("stopped") : hoverBuilding.milkSecondsToNext >= 0 ? `${hoverBuilding.milkSecondsToNext}s` : t("stopped")}</b>
+    </div>
+    <div style={{ opacity: 0.9, marginTop: 2, fontSize: 13 }}>
+      🍖 {t("beef")}: <b>{Math.round(hoverBuilding.beefProgress01 * 100)}%</b> • {t("secondsToNext")}:{" "}
+      <b>{hoverBuilding.blocked?.length ? t("stopped") : hoverBuilding.beefSecondsToNext >= 0 ? `${hoverBuilding.beefSecondsToNext}s` : t("stopped")}</b>
+    </div>
+    {hoverBuilding.blocked?.length ? (
+      <div style={{ opacity: 0.9, marginTop: 6, fontSize: 13 }}>
+        {t("blocked")}:{" "}
+        <b>
+          {hoverBuilding.blocked
+            .map((b) =>
+              b === "no_workers"
+                ? t("noWorkers")
+                : b === "no_warehouse"
+                  ? t("noWarehouse")
+                  : b === "warehouse_full"
+                    ? t("warehouseFull")
+                    : b === "bad_placement"
+                      ? t("badPlacement")
+                      : b === "no_inputs"
+                        ? t("noInputs")
+                        : b
+            )
+            .join(", ")}
+        </b>
+      </div>
+    ) : null}
+  </>
+) : null}
+
     <div style={{ opacity: 0.9, marginTop: 6, fontSize: 13 }}>
       {t("progress")}: <b>{Math.round(hoverBuilding.progress01 * 100)}%</b> • {t("secondsToNext")}:{" "}
       <b>{hoverBuilding.blocked?.length ? t("stopped") : hoverBuilding.secondsToNext >= 0 ? `${hoverBuilding.secondsToNext}s` : t("stopped")}</b>
@@ -654,6 +911,11 @@ export default function App() {
               {selectedBuilding.kind === "lumbermill" ? t("tool_lumbermill") : null}
               {selectedBuilding.kind === "clay_quarry" ? t("tool_clay_quarry") : null}
               {selectedBuilding.kind === "pottery" ? t("tool_pottery") : null}
+              {selectedBuilding.kind === "furniture_factory" ? t("tool_furniture_factory") : null}
+              {selectedBuilding.kind === "farm_chicken" ? t("tool_farm_chicken") : null}
+              {selectedBuilding.kind === "farm_pig" ? t("tool_farm_pig") : null}
+              {selectedBuilding.kind === "farm_fish" ? t("tool_farm_fish") : null}
+              {selectedBuilding.kind === "farm_cow" ? t("tool_farm_cow") : null}
               {" "}({selectedBuilding.x},{selectedBuilding.y})
             </div>
             <button onClick={() => setSelectedBuilding(null)} style={btnStyle(false)}>
@@ -688,6 +950,12 @@ export default function App() {
               </div>
               <div style={{ opacity: 0.9, marginTop: 4, fontSize: 13 }}>
                 🏺 {t("pottery")}: <b>{selectedBuilding.stored.pottery}</b>
+              </div>
+              <div style={{ opacity: 0.9, marginTop: 4, fontSize: 13 }}>
+                🪑 {t("furniture")}: <b>{selectedBuilding.stored.furniture}</b>
+              </div>
+              <div style={{ opacity: 0.9, marginTop: 4, fontSize: 13 }}>
+                🥛 {t("milk")}: <b>{selectedBuilding.stored.milk}</b> • 🍖 {t("beef")}: <b>{selectedBuilding.stored.beef}</b>
               </div>
             </>
           ) : null}

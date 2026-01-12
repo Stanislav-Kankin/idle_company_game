@@ -67,6 +67,32 @@ const WORKERS_MARKET = 2;
 const WORKERS_CLAY_QUARRY = 8;
 const WORKERS_POTTERY = 10;
 const WORKERS_FURNITURE_FACTORY = 12;
+const WORKERS_FARM_CHICKEN = 8;
+const WORKERS_FARM_PIG = 12;
+const WORKERS_FARM_FISH = 8;
+const WORKERS_FARM_COW = 14;
+
+// Farms (Iteration C3.4)
+// Chicken farm: 1 meat per 5 minutes
+const FARM_CHICKEN_TIME_MS = 300_000;
+const FARM_CHICKEN_RECIPE: ProductionRecipe = { durationMs: FARM_CHICKEN_TIME_MS, outputs: { meat: 1 } };
+
+// Pig farm: 2 meat per 8 minutes
+const FARM_PIG_TIME_MS = 480_000;
+const FARM_PIG_RECIPE: ProductionRecipe = { durationMs: FARM_PIG_TIME_MS, outputs: { meat: 2 } };
+
+// Fish farm: adjacent to water; if adjacent fish spot => faster
+const FARM_FISH_TIME_FAST_MS = 180_000; // 3 min
+const FARM_FISH_TIME_SLOW_MS = 480_000; // 8 min
+const FARM_FISH_RECIPE_FAST: ProductionRecipe = { durationMs: FARM_FISH_TIME_FAST_MS, outputs: { fish: 2 } };
+const FARM_FISH_RECIPE_SLOW: ProductionRecipe = { durationMs: FARM_FISH_TIME_SLOW_MS, outputs: { fish: 2 } };
+
+// Cow farm: milk + beef in parallel
+const FARM_COW_MILK_TIME_MS = 600_000; // 10 min
+const FARM_COW_BEEF_TIME_MS = 2_400_000; // 40 min
+const FARM_COW_MILK_RECIPE: ProductionRecipe = { durationMs: FARM_COW_MILK_TIME_MS, outputs: { milk: 1 } };
+const FARM_COW_BEEF_RECIPE: ProductionRecipe = { durationMs: FARM_COW_BEEF_TIME_MS, outputs: { beef: 1 } };
+
 
 type MinimapPayload = {
   cols: number;
@@ -147,6 +173,11 @@ export function GameCanvas(props: {
   const clayQuarryProgressRef = useRef<Map<number, number>>(new Map()); // ms
   const potteryProgressRef = useRef<Map<number, number>>(new Map()); // ms
   const furnitureFactoryProgressRef = useRef<Map<number, number>>(new Map()); // ms
+  const farmChickenProgressRef = useRef<Map<number, number>>(new Map()); // ms
+  const farmPigProgressRef = useRef<Map<number, number>>(new Map()); // ms
+  const farmFishProgressRef = useRef<Map<number, number>>(new Map()); // ms
+  const farmCowMilkProgressRef = useRef<Map<number, number>>(new Map()); // ms
+  const farmCowBeefProgressRef = useRef<Map<number, number>>(new Map()); // ms
 
   // Workforce assignment (recomputed periodically)
   const workersAssignedRef = useRef<Map<number, number>>(new Map());
@@ -287,6 +318,16 @@ export function GameCanvas(props: {
       } else if (v === 9) {
         if (!furnitureFactoryProgressRef.current.has(i)) furnitureFactoryProgressRef.current.set(i, 0);
       }
+      else if (v === 10) {
+        if (!farmChickenProgressRef.current.has(i)) farmChickenProgressRef.current.set(i, 0);
+      } else if (v === 11) {
+        if (!farmPigProgressRef.current.has(i)) farmPigProgressRef.current.set(i, 0);
+      } else if (v === 12) {
+        if (!farmFishProgressRef.current.has(i)) farmFishProgressRef.current.set(i, 0);
+      } else if (v === 13) {
+        if (!farmCowMilkProgressRef.current.has(i)) farmCowMilkProgressRef.current.set(i, 0);
+        if (!farmCowBeefProgressRef.current.has(i)) farmCowBeefProgressRef.current.set(i, 0);
+      }
     }
 
     // Prune removed buildings
@@ -308,13 +349,28 @@ export function GameCanvas(props: {
     for (const k of Array.from(furnitureFactoryProgressRef.current.keys())) {
       if (cells[k] !== 9) furnitureFactoryProgressRef.current.delete(k);
     }
+    for (const k of Array.from(farmChickenProgressRef.current.keys())) {
+      if (cells[k] !== 10) farmChickenProgressRef.current.delete(k);
+    }
+    for (const k of Array.from(farmPigProgressRef.current.keys())) {
+      if (cells[k] !== 11) farmPigProgressRef.current.delete(k);
+    }
+    for (const k of Array.from(farmFishProgressRef.current.keys())) {
+      if (cells[k] !== 12) farmFishProgressRef.current.delete(k);
+    }
+    for (const k of Array.from(farmCowMilkProgressRef.current.keys())) {
+      if (cells[k] !== 13) farmCowMilkProgressRef.current.delete(k);
+    }
+    for (const k of Array.from(farmCowBeefProgressRef.current.keys())) {
+      if (cells[k] !== 13) farmCowBeefProgressRef.current.delete(k);
+    }
 
     // Keep workforce maps only for active buildings that require workers.
     for (const k of Array.from(workersAssignedRef.current.keys())) {
-      if (cells[k] !== 4 && cells[k] !== 5 && cells[k] !== 6 && cells[k] !== 7 && cells[k] !== 8 && cells[k] !== 9) workersAssignedRef.current.delete(k);
+      if (cells[k] !== 4 && cells[k] !== 5 && cells[k] !== 6 && cells[k] !== 7 && cells[k] !== 8 && cells[k] !== 9 && cells[k] !== 10 && cells[k] !== 11 && cells[k] !== 12 && cells[k] !== 13) workersAssignedRef.current.delete(k);
     }
     for (const k of Array.from(workersNearbyRef.current.keys())) {
-      if (cells[k] !== 4 && cells[k] !== 5 && cells[k] !== 6 && cells[k] !== 7 && cells[k] !== 8 && cells[k] !== 9) workersNearbyRef.current.delete(k);
+      if (cells[k] !== 4 && cells[k] !== 5 && cells[k] !== 6 && cells[k] !== 7 && cells[k] !== 8 && cells[k] !== 9 && cells[k] !== 10 && cells[k] !== 11 && cells[k] !== 12 && cells[k] !== 13) workersNearbyRef.current.delete(k);
     }
   }
 
@@ -324,6 +380,10 @@ export function GameCanvas(props: {
     if (v === 7) return WORKERS_CLAY_QUARRY;
     if (v === 8) return WORKERS_POTTERY;
     if (v === 9) return WORKERS_FURNITURE_FACTORY;
+    if (v === 10) return WORKERS_FARM_CHICKEN;
+    if (v === 11) return WORKERS_FARM_PIG;
+    if (v === 12) return WORKERS_FARM_FISH;
+    if (v === 13) return WORKERS_FARM_COW;
     return 0;
   }
 
@@ -482,7 +542,7 @@ export function GameCanvas(props: {
 
   function getBuildingInfoAt(x: number, y: number): BuildingInfo | null {
     const ct = cellTypeAt(gridRef.current, x, y);
-    if (ct !== "warehouse" && ct !== "market" && ct !== "lumbermill" && ct !== "clay_quarry" && ct !== "pottery" && ct !== "furniture_factory") return null;
+    if (ct !== "warehouse" && ct !== "market" && ct !== "lumbermill" && ct !== "clay_quarry" && ct !== "pottery" && ct !== "furniture_factory" && ct !== "farm_chicken" && ct !== "farm_pig" && ct !== "farm_fish" && ct !== "farm_cow") return null;
 
     const cols = gridRef.current.cols;
     const i = y * cols + x;
@@ -635,7 +695,7 @@ export function GameCanvas(props: {
     }
 
     // furniture factory
-    {
+    if (ct === "furniture_factory") {
       const progressMs = furnitureFactoryProgressRef.current.get(i) ?? 0;
       const clamped = Math.max(0, Math.min(FURNITURE_FACTORY_TIME_MS, progressMs));
 
@@ -668,8 +728,161 @@ export function GameCanvas(props: {
         secondsToNext,
       };
     }
-  }
 
+    if (ct === "farm_chicken") {
+      const progressMs = farmChickenProgressRef.current.get(i) ?? 0;
+      const clamped = Math.max(0, Math.min(FARM_CHICKEN_TIME_MS, progressMs));
+
+      const blocked: ProductionBlockReason[] = [];
+      const nearest = findPreferredWarehouseIndexForOutput(x, y, "meat");
+      if (req > 0 && assigned <= 0) blocked.push("no_workers");
+      if (nearest === null) blocked.push("no_warehouse");
+      else {
+        const store = warehousesRef.current.get(nearest) ?? emptyEconomyState();
+        if (totalStored(store) >= WAREHOUSE_CAPACITY) blocked.push("warehouse_full");
+      }
+
+      const secondsToNext =
+        blocked.length === 0 && efficiency > 0
+          ? Math.ceil(Math.max(0, (FARM_CHICKEN_TIME_MS - clamped) / (1000 * efficiency)))
+          : -1;
+
+      return {
+        kind: "farm_chicken",
+        x,
+        y,
+        workersRequired: req,
+        workersAssigned: assigned,
+        workersNearby: nearby,
+        progress01: clamped / FARM_CHICKEN_TIME_MS,
+        efficiency,
+        blocked,
+        secondsToNext,
+      };
+    }
+
+    if (ct === "farm_pig") {
+      const progressMs = farmPigProgressRef.current.get(i) ?? 0;
+      const clamped = Math.max(0, Math.min(FARM_PIG_TIME_MS, progressMs));
+
+      const blocked: ProductionBlockReason[] = [];
+      const nearest = findPreferredWarehouseIndexForOutput(x, y, "meat");
+      if (req > 0 && assigned <= 0) blocked.push("no_workers");
+      if (nearest === null) blocked.push("no_warehouse");
+      else {
+        const store = warehousesRef.current.get(nearest) ?? emptyEconomyState();
+        if (totalStored(store) >= WAREHOUSE_CAPACITY) blocked.push("warehouse_full");
+      }
+
+      const secondsToNext =
+        blocked.length === 0 && efficiency > 0
+          ? Math.ceil(Math.max(0, (FARM_PIG_TIME_MS - clamped) / (1000 * efficiency)))
+          : -1;
+
+      return {
+        kind: "farm_pig",
+        x,
+        y,
+        workersRequired: req,
+        workersAssigned: assigned,
+        workersNearby: nearby,
+        progress01: clamped / FARM_PIG_TIME_MS,
+        efficiency,
+        blocked,
+        secondsToNext,
+      };
+    }
+
+    if (ct === "farm_fish") {
+      const progressMs = farmFishProgressRef.current.get(i) ?? 0;
+
+      const hasWaterAdj = hasAdjacentWaterOrFishSpot(x, y);
+      const hasFishSpotAdj = hasAdjacentFishSpot(x, y);
+      const recipe = hasFishSpotAdj ? FARM_FISH_RECIPE_FAST : FARM_FISH_RECIPE_SLOW;
+      const durationMs = recipe.durationMs;
+
+      const clamped = Math.max(0, Math.min(durationMs, progressMs));
+
+      const blocked: ProductionBlockReason[] = [];
+      const nearest = findPreferredWarehouseIndexForOutput(x, y, "fish");
+      if (req > 0 && assigned <= 0) blocked.push("no_workers");
+      if (!hasWaterAdj) blocked.push("bad_placement");
+      if (nearest === null) blocked.push("no_warehouse");
+      else {
+        const store = warehousesRef.current.get(nearest) ?? emptyEconomyState();
+        if (totalStored(store) >= WAREHOUSE_CAPACITY) blocked.push("warehouse_full");
+      }
+
+      const secondsToNext =
+        blocked.length === 0 && efficiency > 0
+          ? Math.ceil(Math.max(0, (durationMs - clamped) / (1000 * efficiency)))
+          : -1;
+
+      return {
+        kind: "farm_fish",
+        x,
+        y,
+        workersRequired: req,
+        workersAssigned: assigned,
+        workersNearby: nearby,
+        hasWaterAdj,
+        hasFishSpotAdj,
+        progress01: clamped / durationMs,
+        efficiency,
+        blocked,
+        secondsToNext,
+      };
+    }
+
+    if (ct === "farm_cow") {
+      const milkProgress = farmCowMilkProgressRef.current.get(i) ?? 0;
+      const beefProgress = farmCowBeefProgressRef.current.get(i) ?? 0;
+
+      const milkClamped = Math.max(0, Math.min(FARM_COW_MILK_TIME_MS, milkProgress));
+      const beefClamped = Math.max(0, Math.min(FARM_COW_BEEF_TIME_MS, beefProgress));
+
+      const blocked: ProductionBlockReason[] = [];
+      const nearestMilk = findPreferredWarehouseIndexForOutput(x, y, "milk");
+      const nearestBeef = findPreferredWarehouseIndexForOutput(x, y, "beef");
+
+      if (req > 0 && assigned <= 0) blocked.push("no_workers");
+      if (nearestMilk === null && nearestBeef === null) blocked.push("no_warehouse");
+      else {
+        const storeMilk = nearestMilk !== null ? warehousesRef.current.get(nearestMilk) ?? emptyEconomyState() : null;
+        const storeBeef = nearestBeef !== null ? warehousesRef.current.get(nearestBeef) ?? emptyEconomyState() : null;
+        if ((storeMilk && totalStored(storeMilk) >= WAREHOUSE_CAPACITY) || (storeBeef && totalStored(storeBeef) >= WAREHOUSE_CAPACITY)) {
+          blocked.push("warehouse_full");
+        }
+      }
+
+      const milkSecondsToNext =
+        blocked.length === 0 && efficiency > 0
+          ? Math.ceil(Math.max(0, (FARM_COW_MILK_TIME_MS - milkClamped) / (1000 * efficiency)))
+          : -1;
+
+      const beefSecondsToNext =
+        blocked.length === 0 && efficiency > 0
+          ? Math.ceil(Math.max(0, (FARM_COW_BEEF_TIME_MS - beefClamped) / (1000 * efficiency)))
+          : -1;
+
+      return {
+        kind: "farm_cow",
+        x,
+        y,
+        workersRequired: req,
+        workersAssigned: assigned,
+        workersNearby: nearby,
+        efficiency,
+        blocked,
+        milkProgress01: milkClamped / FARM_COW_MILK_TIME_MS,
+        milkSecondsToNext,
+        beefProgress01: beefClamped / FARM_COW_BEEF_TIME_MS,
+        beefSecondsToNext,
+      };
+    }
+
+    return null;
+  }
   function isBlockedByTerrain(x: number, y: number): boolean {
     const i = y * gridRef.current.cols + x;
     const tv = terrainRef.current[i] ?? TERRAIN.Plain;
@@ -695,6 +908,47 @@ export function GameCanvas(props: {
     }
     return false;
   }
+
+function hasAdjacentWaterOrFishSpot(x: number, y: number): boolean {
+    const cols = gridRef.current.cols;
+    const rows = gridRef.current.rows;
+
+    const neigh = [
+      [x, y - 1],
+      [x + 1, y],
+      [x, y + 1],
+      [x - 1, y],
+    ];
+
+    for (const [nx, ny] of neigh) {
+      if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
+      const i = ny * cols + nx;
+      const tv = terrainRef.current[i] ?? TERRAIN.Plain;
+      if (tv === TERRAIN.Water || tv === TERRAIN.FishSpot) return true;
+    }
+    return false;
+  }
+
+  function hasAdjacentFishSpot(x: number, y: number): boolean {
+    const cols = gridRef.current.cols;
+    const rows = gridRef.current.rows;
+
+    const neigh = [
+      [x, y - 1],
+      [x + 1, y],
+      [x, y + 1],
+      [x - 1, y],
+    ];
+
+    for (const [nx, ny] of neigh) {
+      if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
+      const i = ny * cols + nx;
+      const tv = terrainRef.current[i] ?? TERRAIN.Plain;
+      if (tv === TERRAIN.FishSpot) return true;
+    }
+    return false;
+  }
+
 
   // Input + placement rules (economy included)
   useEffect(() => {
@@ -731,7 +985,7 @@ export function GameCanvas(props: {
         }
 
         // Tap other buildings -> open inspector (unless bulldoze)
-        if ((current === "warehouse" || current === "market" || current === "lumbermill" || current === "clay_quarry" || current === "pottery" || current === "furniture_factory") && t !== "bulldoze") {
+        if ((current === "warehouse" || current === "market" || current === "lumbermill" || current === "clay_quarry" || current === "pottery" || current === "furniture_factory" || current === "farm_chicken" || current === "farm_pig" || current === "farm_fish" || current === "farm_cow") && t !== "bulldoze") {
           const info = getBuildingInfoAt(tile.x, tile.y);
           onBuildingSelectRef.current?.(info);
           onHouseSelectRef.current?.(null);
@@ -760,6 +1014,13 @@ export function GameCanvas(props: {
           if (current === "clay_quarry") clayQuarryProgressRef.current.delete(i);
           if (current === "pottery") potteryProgressRef.current.delete(i);
           if (current === "furniture_factory") furnitureFactoryProgressRef.current.delete(i);
+          if (current === "farm_chicken") farmChickenProgressRef.current.delete(i);
+          if (current === "farm_pig") farmPigProgressRef.current.delete(i);
+          if (current === "farm_fish") farmFishProgressRef.current.delete(i);
+          if (current === "farm_cow") {
+            farmCowMilkProgressRef.current.delete(i);
+            farmCowBeefProgressRef.current.delete(i);
+          }
 
           return;
         }
@@ -885,6 +1146,73 @@ if (t === "pottery") {
           return;
         }
 
+
+        if (t === "farm_chicken") {
+          if (!hasAdjacentRoad(gridRef.current, tile.x, tile.y)) {
+            notifyKeyRef.current?.("requiresRoadAdj");
+            return;
+          }
+
+          const cost = buildCostsRef.current.farm_chicken ?? 0;
+          if (!trySpendRef.current(cost)) return;
+
+          setCell(gridRef.current, tile.x, tile.y, "farm_chicken");
+          const i = tile.y * gridRef.current.cols + tile.x;
+          farmChickenProgressRef.current.set(i, 0);
+          return;
+        }
+
+        if (t === "farm_pig") {
+          if (!hasAdjacentRoad(gridRef.current, tile.x, tile.y)) {
+            notifyKeyRef.current?.("requiresRoadAdj");
+            return;
+          }
+
+          const cost = buildCostsRef.current.farm_pig ?? 0;
+          if (!trySpendRef.current(cost)) return;
+
+          setCell(gridRef.current, tile.x, tile.y, "farm_pig");
+          const i = tile.y * gridRef.current.cols + tile.x;
+          farmPigProgressRef.current.set(i, 0);
+          return;
+        }
+
+        if (t === "farm_fish") {
+          if (!hasAdjacentRoad(gridRef.current, tile.x, tile.y)) {
+            notifyKeyRef.current?.("requiresRoadAdj");
+            return;
+          }
+
+          if (!hasAdjacentWaterOrFishSpot(tile.x, tile.y)) {
+            notifyKeyRef.current?.("requiresWaterAdj");
+            return;
+          }
+
+          const cost = buildCostsRef.current.farm_fish ?? 0;
+          if (!trySpendRef.current(cost)) return;
+
+          setCell(gridRef.current, tile.x, tile.y, "farm_fish");
+          const i = tile.y * gridRef.current.cols + tile.x;
+          farmFishProgressRef.current.set(i, 0);
+          return;
+        }
+
+        if (t === "farm_cow") {
+          if (!hasAdjacentRoad(gridRef.current, tile.x, tile.y)) {
+            notifyKeyRef.current?.("requiresRoadAdj");
+            return;
+          }
+
+          const cost = buildCostsRef.current.farm_cow ?? 0;
+          if (!trySpendRef.current(cost)) return;
+
+          setCell(gridRef.current, tile.x, tile.y, "farm_cow");
+          const i = tile.y * gridRef.current.cols + tile.x;
+          farmCowMilkProgressRef.current.set(i, 0);
+          farmCowBeefProgressRef.current.set(i, 0);
+          return;
+        }
+
         if (t === "road") {
           const cost = buildCostsRef.current.road ?? 0;
           if (!trySpendRef.current(cost)) return;
@@ -953,7 +1281,7 @@ if (t === "pottery") {
           const y = (idx / cols) | 0;
 
           const hasForestAdj = hasAdjacentForest(x, y);
-          const nearest = findPreferredWarehouseIndexForOutput(x, y, "clay");
+          const nearest = findPreferredWarehouseIndexForOutput(x, y, "wood");
           const store = nearest !== null ? warehousesRef.current.get(nearest) ?? emptyEconomyState() : null;
 
           const v = gridRef.current.cells[idx] ?? 0;
@@ -987,7 +1315,7 @@ if (t === "pottery") {
           const x = idx % cols;
           const y = (idx / cols) | 0;
 
-          const nearest = findNearestWarehouseIndexWithInputs(x, y, POTTERY_RECIPE.inputs);
+          const nearest = findPreferredWarehouseIndexForOutput(x, y, "clay");
           const store = nearest !== null ? warehousesRef.current.get(nearest) ?? emptyEconomyState() : null;
 
           const v = gridRef.current.cells[idx] ?? 0;
@@ -1021,7 +1349,7 @@ if (t === "pottery") {
           const x = idx % cols;
           const y = (idx / cols) | 0;
 
-          const nearest = findNearestWarehouseIndexWithInputs(x, y, POTTERY_RECIPE.inputs);
+          const nearest = findPreferredWarehouseIndexForOutput(x, y, "clay");
           const store = nearest !== null ? warehousesRef.current.get(nearest) ?? emptyEconomyState() : null;
 
           const v = gridRef.current.cells[idx] ?? 0;
@@ -1082,6 +1410,159 @@ if (t === "pottery") {
           furnitureFactoryProgressRef.current.set(idx, res.nextProgressMs);
         }
 
+
+        // Production: Farm Chicken -> nearest Warehouse (1 meat per 300s)
+        for (let idx = 0; idx < cells.length; idx++) {
+          if (cells[idx] !== 10) continue; // farm chicken
+
+          const x = idx % cols;
+          const y = (idx / cols) | 0;
+
+          const nearest = findPreferredWarehouseIndexForOutput(x, y, "meat");
+          const store = nearest !== null ? warehousesRef.current.get(nearest) ?? emptyEconomyState() : null;
+
+          const v = gridRef.current.cells[idx] ?? 0;
+          const req = requiredWorkersForCell(v);
+          const assigned = workersAssignedRef.current.get(idx) ?? 0;
+          const efficiency = req > 0 ? Math.min(1, assigned / req) : 1;
+
+          const prev = farmChickenProgressRef.current.get(idx) ?? 0;
+
+          const res = stepProduction({
+            dtMs: 1000,
+            progressMs: prev,
+            efficiency,
+            recipe: FARM_CHICKEN_RECIPE,
+            placementOk: true,
+            warehouse: store,
+            capacity: WAREHOUSE_CAPACITY,
+          });
+
+          if (nearest !== null && res.nextWarehouse) warehousesRef.current.set(nearest, res.nextWarehouse);
+          farmChickenProgressRef.current.set(idx, res.nextProgressMs);
+        }
+
+        // Production: Farm Pig -> nearest Warehouse (2 meat per 480s)
+        for (let idx = 0; idx < cells.length; idx++) {
+          if (cells[idx] !== 11) continue; // farm pig
+
+          const x = idx % cols;
+          const y = (idx / cols) | 0;
+
+          const nearest = findPreferredWarehouseIndexForOutput(x, y, "meat");
+          const store = nearest !== null ? warehousesRef.current.get(nearest) ?? emptyEconomyState() : null;
+
+          const v = gridRef.current.cells[idx] ?? 0;
+          const req = requiredWorkersForCell(v);
+          const assigned = workersAssignedRef.current.get(idx) ?? 0;
+          const efficiency = req > 0 ? Math.min(1, assigned / req) : 1;
+
+          const prev = farmPigProgressRef.current.get(idx) ?? 0;
+
+          const res = stepProduction({
+            dtMs: 1000,
+            progressMs: prev,
+            efficiency,
+            recipe: FARM_PIG_RECIPE,
+            placementOk: true,
+            warehouse: store,
+            capacity: WAREHOUSE_CAPACITY,
+          });
+
+          if (nearest !== null && res.nextWarehouse) warehousesRef.current.set(nearest, res.nextWarehouse);
+          farmPigProgressRef.current.set(idx, res.nextProgressMs);
+        }
+
+        // Production: Farm Fish -> nearest Warehouse (2 fish per 180s/480s; requires adjacent water)
+        for (let idx = 0; idx < cells.length; idx++) {
+          if (cells[idx] !== 12) continue; // farm fish
+
+          const x = idx % cols;
+          const y = (idx / cols) | 0;
+
+          const hasWaterAdj = hasAdjacentWaterOrFishSpot(x, y);
+          const hasFishSpotAdj = hasAdjacentFishSpot(x, y);
+          const recipe = hasFishSpotAdj ? FARM_FISH_RECIPE_FAST : FARM_FISH_RECIPE_SLOW;
+
+          const nearest = findPreferredWarehouseIndexForOutput(x, y, "fish");
+          const store = nearest !== null ? warehousesRef.current.get(nearest) ?? emptyEconomyState() : null;
+
+          const v = gridRef.current.cells[idx] ?? 0;
+          const req = requiredWorkersForCell(v);
+          const assigned = workersAssignedRef.current.get(idx) ?? 0;
+          const efficiency = req > 0 ? Math.min(1, assigned / req) : 1;
+
+          const prev = farmFishProgressRef.current.get(idx) ?? 0;
+
+          const res = stepProduction({
+            dtMs: 1000,
+            progressMs: prev,
+            efficiency,
+            recipe,
+            placementOk: hasWaterAdj,
+            warehouse: store,
+            capacity: WAREHOUSE_CAPACITY,
+          });
+
+          if (nearest !== null && res.nextWarehouse) warehousesRef.current.set(nearest, res.nextWarehouse);
+          farmFishProgressRef.current.set(idx, res.nextProgressMs);
+        }
+
+        // Production: Farm Cow -> nearest Warehouse (milk + beef in parallel)
+        for (let idx = 0; idx < cells.length; idx++) {
+          if (cells[idx] !== 13) continue; // farm cow
+
+          const x = idx % cols;
+          const y = (idx / cols) | 0;
+
+          const v = gridRef.current.cells[idx] ?? 0;
+          const req = requiredWorkersForCell(v);
+          const assigned = workersAssignedRef.current.get(idx) ?? 0;
+          const efficiency = req > 0 ? Math.min(1, assigned / req) : 1;
+
+          // milk
+          {
+            const nearest = findPreferredWarehouseIndexForOutput(x, y, "milk");
+            const store = nearest !== null ? warehousesRef.current.get(nearest) ?? emptyEconomyState() : null;
+
+            const prev = farmCowMilkProgressRef.current.get(idx) ?? 0;
+
+            const res = stepProduction({
+              dtMs: 1000,
+              progressMs: prev,
+              efficiency,
+              recipe: FARM_COW_MILK_RECIPE,
+              placementOk: true,
+              warehouse: store,
+              capacity: WAREHOUSE_CAPACITY,
+            });
+
+            if (nearest !== null && res.nextWarehouse) warehousesRef.current.set(nearest, res.nextWarehouse);
+            farmCowMilkProgressRef.current.set(idx, res.nextProgressMs);
+          }
+
+          // beef
+          {
+            const nearest = findPreferredWarehouseIndexForOutput(x, y, "beef");
+            const store = nearest !== null ? warehousesRef.current.get(nearest) ?? emptyEconomyState() : null;
+
+            const prev = farmCowBeefProgressRef.current.get(idx) ?? 0;
+
+            const res = stepProduction({
+              dtMs: 1000,
+              progressMs: prev,
+              efficiency,
+              recipe: FARM_COW_BEEF_RECIPE,
+              placementOk: true,
+              warehouse: store,
+              capacity: WAREHOUSE_CAPACITY,
+            });
+
+            if (nearest !== null && res.nextWarehouse) warehousesRef.current.set(nearest, res.nextWarehouse);
+            farmCowBeefProgressRef.current.set(idx, res.nextProgressMs);
+          }
+        }
+
         // Update HUD economy as sum of all warehouses
         const sum = emptyEconomyState();
         for (const store of warehousesRef.current.values()) {
@@ -1092,6 +1573,8 @@ if (t === "pottery") {
           sum.fish += store.fish ?? 0;
           sum.pottery += store.pottery ?? 0;
           sum.furniture += store.furniture ?? 0;
+          sum.milk += store.milk ?? 0;
+          sum.beef += store.beef ?? 0;
         }
         economyRef.current = sum;
       }

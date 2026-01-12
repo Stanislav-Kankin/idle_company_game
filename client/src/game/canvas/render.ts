@@ -48,6 +48,26 @@ function isPottery(grid: Grid, x: number, y: number) {
   return cellAt(grid, x, y) === 8;
 }
 
+function isFurnitureFactory(grid: Grid, x: number, y: number) {
+  return cellAt(grid, x, y) === 9;
+}
+
+function isFarmChicken(grid: Grid, x: number, y: number) {
+  return cellAt(grid, x, y) === 10;
+}
+
+function isFarmPig(grid: Grid, x: number, y: number) {
+  return cellAt(grid, x, y) === 11;
+}
+
+function isFarmFish(grid: Grid, x: number, y: number) {
+  return cellAt(grid, x, y) === 12;
+}
+
+function isFarmCow(grid: Grid, x: number, y: number) {
+  return cellAt(grid, x, y) === 13;
+}
+
 function getSpriteFrame(sp: SpriteEntry, now: number): SpriteFrame {
   if (!sp.frameMs || sp.frames.length <= 1) return sp.frames[0]!;
   const idx = Math.floor(now / sp.frameMs) % sp.frames.length;
@@ -389,6 +409,82 @@ function drawPottery(ctx: CanvasRenderingContext2D, x: number, y: number, tile: 
   ctx.fill();
 }
 
+function drawFurnitureFactory(ctx: CanvasRenderingContext2D, x: number, y: number, tile: number) {
+  const px = x * tile;
+  const py = y * tile;
+
+  ctx.fillStyle = "rgba(100, 116, 139, 0.55)";
+  ctx.fillRect(px + 6, py + tile / 2 + 4, tile - 12, tile / 2 - 8);
+
+  ctx.fillStyle = "rgba(71, 85, 105, 0.65)";
+  ctx.beginPath();
+  ctx.moveTo(px + 6, py + tile / 2 + 4);
+  ctx.lineTo(px + tile / 2, py + 10);
+  ctx.lineTo(px + tile - 6, py + tile / 2 + 4);
+  ctx.closePath();
+  ctx.fill();
+
+  // chair-ish icon
+  ctx.strokeStyle = "rgba(15, 23, 42, 0.7)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(px + tile * 0.62, py + tile * 0.62);
+  ctx.lineTo(px + tile * 0.62, py + tile * 0.80);
+  ctx.moveTo(px + tile * 0.62, py + tile * 0.70);
+  ctx.lineTo(px + tile * 0.78, py + tile * 0.70);
+  ctx.stroke();
+}
+
+function drawFarmChicken(ctx: CanvasRenderingContext2D, x: number, y: number, tile: number) {
+  const px = x * tile;
+  const py = y * tile;
+
+  ctx.fillStyle = "rgba(245, 158, 11, 0.45)";
+  ctx.fillRect(px + 7, py + tile / 2 + 6, tile - 14, tile / 2 - 10);
+
+  ctx.fillStyle = "rgba(234, 88, 12, 0.55)";
+  ctx.beginPath();
+  ctx.moveTo(px + 7, py + tile / 2 + 6);
+  ctx.lineTo(px + tile / 2, py + 10);
+  ctx.lineTo(px + tile - 7, py + tile / 2 + 6);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawFarmPig(ctx: CanvasRenderingContext2D, x: number, y: number, tile: number) {
+  const px = x * tile;
+  const py = y * tile;
+
+  ctx.fillStyle = "rgba(248, 113, 113, 0.40)";
+  ctx.fillRect(px + 7, py + tile / 2 + 6, tile - 14, tile / 2 - 10);
+
+  ctx.fillStyle = "rgba(239, 68, 68, 0.52)";
+  ctx.fillRect(px + 10, py + 12, tile - 20, 10);
+}
+
+function drawFarmFish(ctx: CanvasRenderingContext2D, x: number, y: number, tile: number) {
+  const px = x * tile;
+  const py = y * tile;
+
+  ctx.fillStyle = "rgba(14, 116, 144, 0.30)";
+  ctx.fillRect(px + 7, py + tile / 2 + 6, tile - 14, tile / 2 - 10);
+
+  ctx.fillStyle = "rgba(253, 224, 71, 0.85)";
+  ctx.fillRect(px + tile * 0.68, py + tile * 0.60, 4, 3);
+}
+
+function drawFarmCow(ctx: CanvasRenderingContext2D, x: number, y: number, tile: number) {
+  const px = x * tile;
+  const py = y * tile;
+
+  ctx.fillStyle = "rgba(148, 163, 184, 0.40)";
+  ctx.fillRect(px + 7, py + tile / 2 + 6, tile - 14, tile / 2 - 10);
+
+  ctx.fillStyle = "rgba(30, 41, 59, 0.65)";
+  ctx.fillRect(px + 11, py + 12, tile - 22, 10);
+}
+
+
 function drawWalker(ctx: CanvasRenderingContext2D, wk: Walker, tile: number, now: number) {
   // Smooth interpolation between prev -> current using nextMoveAt cadence.
   const startAt = wk.nextMoveAt - WALKER_MOVE_EVERY_MS_DEFAULT;
@@ -531,6 +627,16 @@ export function render(
         drawClayQuarry(ctx, x, y, world.tile);
       } else if (isPottery(grid, x, y)) {
         drawPottery(ctx, x, y, world.tile);
+      } else if (isFurnitureFactory(grid, x, y)) {
+        drawFurnitureFactory(ctx, x, y, world.tile);
+      } else if (isFarmChicken(grid, x, y)) {
+        drawFarmChicken(ctx, x, y, world.tile);
+      } else if (isFarmPig(grid, x, y)) {
+        drawFarmPig(ctx, x, y, world.tile);
+      } else if (isFarmFish(grid, x, y)) {
+        drawFarmFish(ctx, x, y, world.tile);
+      } else if (isFarmCow(grid, x, y)) {
+        drawFarmCow(ctx, x, y, world.tile);
       } else if (isHouse(grid, x, y)) {
         const i = y * grid.cols + x;
         const level = houseLevels[i] || 1;

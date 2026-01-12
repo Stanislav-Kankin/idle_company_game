@@ -47,6 +47,11 @@ const dict = {
     tool_lumbermill: "Лесопилка",
     tool_clay_quarry: "Глиняный карьер",
     tool_pottery: "Гончарная",
+    tool_furniture_factory: "Фабрика мебели",
+    tool_farm_chicken: "Ферма (курица)",
+    tool_farm_pig: "Ферма (свинина)",
+    tool_farm_fish: "Ферма (рыба)",
+    tool_farm_cow: "Ферма (коровы)",
     tool_bulldoze: "Снос",
 
     wood: "Дерево",
@@ -58,6 +63,7 @@ const dict = {
 
     requiresForestAdj: "Нужен лес рядом",
     requiresRoadAdj: "Нужна дорога рядом",
+    requiresWaterAdj: "Нужна вода рядом",
 
     capacity: "Ёмкость",
     stored: "Запасы",
@@ -67,6 +73,8 @@ const dict = {
     secondsToNext: "До следующей единицы",
     forestAdj: "Лес рядом",
     warehousePresent: "Склад доступен",
+    waterAdj: "Вода рядом",
+    fishSpotAdj: "Рыбное место",
 
     workers: "Рабочие",
     workersNearby: "Рядом",
@@ -129,6 +137,11 @@ const dict = {
     tool_lumbermill: "Lumbermill",
     tool_clay_quarry: "Clay quarry",
     tool_pottery: "Pottery",
+    tool_furniture_factory: "Furniture factory",
+    tool_farm_chicken: "Chicken farm",
+    tool_farm_pig: "Pig farm",
+    tool_farm_fish: "Fish farm",
+    tool_farm_cow: "Cow farm",
     tool_bulldoze: "Bulldoze",
 
     wood: "Wood",
@@ -140,6 +153,7 @@ const dict = {
 
     requiresForestAdj: "Needs adjacent forest",
     requiresRoadAdj: "Needs adjacent road",
+    requiresWaterAdj: "Needs adjacent water",
 
     capacity: "Capacity",
     stored: "Stored",
@@ -149,6 +163,8 @@ const dict = {
     secondsToNext: "Time to next unit",
     forestAdj: "Adjacent forest",
     warehousePresent: "Warehouse available",
+    waterAdj: "Water adjacent",
+    fishSpotAdj: "Fish spot",
 
     workers: "Workers",
     workersNearby: "Nearby",
