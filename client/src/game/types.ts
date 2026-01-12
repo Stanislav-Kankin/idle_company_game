@@ -6,14 +6,33 @@ export type Tool =
   | "market"
   | "warehouse"
   | "lumbermill"
+  | "furniture_factory"
   | "clay_quarry"
   | "pottery"
+  | "farm_chicken"
+  | "farm_pig"
+  | "farm_fish"
+  | "farm_cow"
   | "bulldoze";
 
-export type CellType = "empty" | "road" | "house" | "well" | "market" | "warehouse" | "lumbermill" | "clay_quarry" | "pottery";
+export type CellType =
+  | "empty"
+  | "road"
+  | "house"
+  | "well"
+  | "market"
+  | "warehouse"
+  | "lumbermill"
+  | "clay_quarry"
+  | "pottery"
+  | "furniture_factory"
+  | "farm_chicken"
+  | "farm_pig"
+  | "farm_fish"
+  | "farm_cow";
 
 // Economy (MVP): raw resources only.
-export type ResourceId = "wood" | "clay" | "grain" | "meat" | "fish" | "pottery";
+export type ResourceId = "wood" | "clay" | "grain" | "meat" | "fish" | "pottery" | "furniture" | "milk" | "beef";
 
 export type EconomyState = Record<ResourceId, number>;
 
@@ -100,12 +119,91 @@ export type PotteryInfo = {
   secondsToNext: number;
 };
 
-export type BuildingInfo = WarehouseInfo | MarketInfo | LumbermillInfo | ClayQuarryInfo | PotteryInfo;
+export type FurnitureFactoryInfo = {
+  kind: "furniture_factory";
+  x: number;
+  y: number;
+  workersRequired: number;
+  workersAssigned: number;
+  workersNearby: number;
+  progress01: number; // 0..1
+  efficiency: number; // 0..1
+  blocked: ProductionBlockReason[];
+  secondsToNext: number;
+};
+
+export type FarmChickenInfo = {
+  kind: "farm_chicken";
+  x: number;
+  y: number;
+  workersRequired: number;
+  workersAssigned: number;
+  workersNearby: number;
+  progress01: number; // 0..1
+  efficiency: number; // 0..1
+  blocked: ProductionBlockReason[];
+  secondsToNext: number;
+};
+
+export type FarmPigInfo = {
+  kind: "farm_pig";
+  x: number;
+  y: number;
+  workersRequired: number;
+  workersAssigned: number;
+  workersNearby: number;
+  progress01: number; // 0..1
+  efficiency: number; // 0..1
+  blocked: ProductionBlockReason[];
+  secondsToNext: number;
+};
+
+export type FarmFishInfo = {
+  kind: "farm_fish";
+  x: number;
+  y: number;
+  workersRequired: number;
+  workersAssigned: number;
+  workersNearby: number;
+  hasWaterAdj: boolean;
+  hasFishSpotAdj: boolean;
+  progress01: number; // 0..1
+  efficiency: number; // 0..1
+  blocked: ProductionBlockReason[];
+  secondsToNext: number;
+};
+
+export type FarmCowInfo = {
+  kind: "farm_cow";
+  x: number;
+  y: number;
+  workersRequired: number;
+  workersAssigned: number;
+  workersNearby: number;
+  efficiency: number; // 0..1
+  blocked: ProductionBlockReason[];
+  milkProgress01: number;
+  milkSecondsToNext: number;
+  beefProgress01: number;
+  beefSecondsToNext: number;
+};
+
+export type BuildingInfo =
+  | WarehouseInfo
+  | MarketInfo
+  | LumbermillInfo
+  | ClayQuarryInfo
+  | PotteryInfo
+  | FurnitureFactoryInfo
+  | FarmChickenInfo
+  | FarmPigInfo
+  | FarmFishInfo
+  | FarmCowInfo;
 
 export type Grid = {
   cols: number;
   rows: number;
-  cells: Uint8Array; // 0 empty, 1 road, 2 house, 3 well, 4 market, 5 warehouse, 6 lumbermill, 7 clay_quarry, 8 pottery
+  cells: Uint8Array; // 0 empty, 1 road, 2 house, 3 well, 4 market, 5 warehouse, 6 lumbermill, 7 clay_quarry, 8 pottery, 9 furniture_factory, 10 farm_chicken, 11 farm_pig, 12 farm_fish, 13 farm_cow
 };
 
 export type HouseInfo = {
@@ -151,6 +249,11 @@ export function cellTypeAt(grid: Grid, x: number, y: number): CellType {
   if (v === 6) return "lumbermill";
   if (v === 7) return "clay_quarry";
   if (v === 8) return "pottery";
+  if (v === 9) return "furniture_factory";
+  if (v === 10) return "farm_chicken";
+  if (v === 11) return "farm_pig";
+  if (v === 12) return "farm_fish";
+  if (v === 13) return "farm_cow";
   return "empty";
 }
 
@@ -184,6 +287,16 @@ export function setCell(grid: Grid, x: number, y: number, t: CellType) {
                   ? 7
                   : t === "pottery"
                     ? 8
+                    : t === "furniture_factory"
+                      ? 9
+                      : t === "farm_chicken"
+                        ? 10
+                        : t === "farm_pig"
+                          ? 11
+                          : t === "farm_fish"
+                            ? 12
+                            : t === "farm_cow"
+                              ? 13
                     : 0;
   grid.cells[idx(x, y, grid.cols)] = v;
 }

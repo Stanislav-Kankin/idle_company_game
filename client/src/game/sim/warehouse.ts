@@ -3,11 +3,21 @@ import type { EconomyState, ResourceId } from "../types";
 export const WAREHOUSE_CAPACITY = 2000;
 
 export function emptyEconomyState(): EconomyState {
-  return { wood: 0, clay: 0, grain: 0, meat: 0, fish: 0, pottery: 0 };
+  return { wood: 0, clay: 0, grain: 0, meat: 0, fish: 0, pottery: 0, furniture: 0, milk: 0, beef: 0 };
 }
 
 export function totalStored(state: EconomyState): number {
-  return (state.wood ?? 0) + (state.clay ?? 0) + (state.grain ?? 0) + (state.meat ?? 0) + (state.fish ?? 0) + (state.pottery ?? 0);
+  return (
+    (state.wood ?? 0) +
+    (state.clay ?? 0) +
+    (state.grain ?? 0) +
+    (state.meat ?? 0) +
+    (state.fish ?? 0) +
+    (state.pottery ?? 0) +
+    (state.furniture ?? 0) +
+    (state.milk ?? 0) +
+    (state.beef ?? 0)
+  );
 }
 
 export function remainingCapacity(state: EconomyState, capacity: number = WAREHOUSE_CAPACITY): number {
