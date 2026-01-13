@@ -1,7 +1,7 @@
 import type { Camera } from "./camera";
 import type { Grid } from "../types";
 import { WALKER_MOVE_EVERY_MS_DEFAULT, type Walker } from "../sim/sim";
-import type { SpriteEntry, SpriteFrame, SpriteSet } from "../sprites/types";
+import type { SpriteEntry, SpriteFrame, SpriteId, SpriteSet } from "../sprites/types";
 import { TERRAIN } from "../map/terrain";
 
 export type WorldConfig = {
@@ -136,6 +136,20 @@ function drawTerrainTile(
 ) {
   const px = x * tile;
   const py = y * tile;
+
+  // Sprite-first terrain (optional). Falls back to procedural tiles if sprite missing.
+  const terrainSpriteId: SpriteId | null =
+    tv === TERRAIN.Water ? "terrain_water" :
+    tv === TERRAIN.FishSpot ? "terrain_fish" :
+    tv === TERRAIN.Forest ? "terrain_forest" :
+    tv === TERRAIN.Mountain ? "terrain_mountain" : null;
+  const tsp = terrainSpriteId ? sprites?.[terrainSpriteId] : undefined;
+  if (tsp) {
+    const fr = getSpriteFrame(tsp, now);
+    // terrain sprites are tile-sized (32x32). draw scaled to current tile size.
+    ctx.drawImage(fr.img as any, px, py, tile, tile);
+    return;
+  }
 
   const r = hash2(x, y);
   const n = terrainAt(terrain, cols, rows, x, y - 1);
@@ -313,6 +327,16 @@ function drawTerrainTile(
       if (nearWaterE) ctx.fillRect(px + tile - edge, py, edge, tile);
     }
   }
+}
+
+function getRoadMask(grid: Grid, x: number, y: number): number {
+  // mask bits: N=1, E=2, S=4, W=8
+  let m = 0;
+  if (isRoad(grid, x, y - 1)) m |= 1;
+  if (isRoad(grid, x + 1, y)) m |= 2;
+  if (isRoad(grid, x, y + 1)) m |= 4;
+  if (isRoad(grid, x - 1, y)) m |= 8;
+  return m & 15;
 }
 
 function drawRoad(ctx: CanvasRenderingContext2D, x: number, y: number, tile: number, grid: Grid) {
@@ -758,9 +782,16 @@ export function render(
   for (let y = yStart; y < yEnd; y++) {
     for (let x = xStart; x < xEnd; x++) {
       if (isRoad(grid, x, y)) {
-        // Roads are auto-tiled procedurally for a continuous look.
-        // (Our current road.png is an icon-like sprite and looks blocky when repeated.)
-        drawRoad(ctx, x, y, world.tile, grid);
+        const mask = getRoadMask(grid, x, y);
+        const sid = (`road_${mask}` as unknown) as SpriteId;
+        const sp = sprites?.[sid];
+        if (sp) {
+          // draw at tile center (road sprites are tile-sized)
+          drawSpriteAnchored(ctx, sp, x * world.tile + world.tile / 2, y * world.tile + world.tile / 2, now);
+        } else {
+          // fallback: procedural road for a continuous look.
+          drawRoad(ctx, x, y, world.tile, grid);
+        }
       }
     }
   }

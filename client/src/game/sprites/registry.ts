@@ -37,6 +37,12 @@ export const SPRITE_DEFS: Record<SpriteId, SpriteDef> = {
   road_14: { files: ["road_14.png"], pivotX: 16, pivotY: 16 },
   road_15: { files: ["road_15.png"], pivotX: 16, pivotY: 16 },
 
+  // Terrain tiles (tile-sized, top-left pivot)
+  terrain_water: { files: ["terrain_water.png"], pivotX: 0, pivotY: 0 },
+  terrain_fish: { files: ["terrain_fish.png"], pivotX: 0, pivotY: 0 },
+  terrain_forest: { files: ["terrain_forest.png"], pivotX: 0, pivotY: 0 },
+  terrain_mountain: { files: ["terrain_mountain.png"], pivotX: 0, pivotY: 0 },
+
   // Buildings are taller than a tile and are anchored to tile bottom-center.
   house_l1: { files: ["house_l1.png"], pivotX: 16, pivotY: 47 },
   house_l2: { files: ["house_l2.png"], pivotX: 16, pivotY: 47 },
