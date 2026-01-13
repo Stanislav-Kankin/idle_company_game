@@ -106,52 +106,213 @@ function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
 
-function drawTerrainTile(ctx: CanvasRenderingContext2D, x: number, y: number, tile: number, tv: number) {
+function hash2(x: number, y: number): number {
+  // Fast deterministic hash -> [0,1)
+  let n = (Math.imul(x, 374761393) ^ Math.imul(y, 668265263)) >>> 0;
+  n = (n ^ (n >>> 13)) >>> 0;
+  n = Math.imul(n, 1274126177) >>> 0;
+  n = (n ^ (n >>> 16)) >>> 0;
+  return n / 4294967296;
+}
+
+function terrainAt(terrain: Uint8Array, cols: number, rows: number, x: number, y: number): number {
+  if (x < 0 || y < 0 || x >= cols || y >= rows) return TERRAIN.Plain;
+  return terrain[y * cols + x] ?? TERRAIN.Plain;
+}
+
+function isWaterLike(tv: number): boolean {
+  return tv === TERRAIN.Water || tv === TERRAIN.FishSpot;
+}
+
+function drawTerrainTile(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  tile: number,
+  tv: number,
+  terrain: Uint8Array,
+  cols: number,
+  rows: number
+) {
   const px = x * tile;
   const py = y * tile;
 
-  // pseudo-2D: top face + tiny shadow edge
-  if (tv === TERRAIN.Water || tv === TERRAIN.FishSpot) {
-    ctx.fillStyle = "rgba(14, 116, 144, 0.38)";
+  const r = hash2(x, y);
+  const n = terrainAt(terrain, cols, rows, x, y - 1);
+  const e = terrainAt(terrain, cols, rows, x + 1, y);
+  const s = terrainAt(terrain, cols, rows, x, y + 1);
+  const w = terrainAt(terrain, cols, rows, x - 1, y);
+
+  const shoreN = isWaterLike(tv) && !isWaterLike(n);
+  const shoreE = isWaterLike(tv) && !isWaterLike(e);
+  const shoreS = isWaterLike(tv) && !isWaterLike(s);
+  const shoreW = isWaterLike(tv) && !isWaterLike(w);
+
+  const nearWaterN = !isWaterLike(tv) && isWaterLike(n);
+  const nearWaterE = !isWaterLike(tv) && isWaterLike(e);
+  const nearWaterS = !isWaterLike(tv) && isWaterLike(s);
+  const nearWaterW = !isWaterLike(tv) && isWaterLike(w);
+
+  const edge = Math.max(3, Math.floor(tile * 0.14));
+
+  // Water / FishSpot
+  if (isWaterLike(tv)) {
+    ctx.fillStyle = `rgba(14, 116, 144, ${0.26 + 0.10 * r})`;
     ctx.fillRect(px, py, tile, tile);
 
-    ctx.fillStyle = "rgba(3, 105, 161, 0.18)";
+    // shoreline sand (inside water tile)
+    if (shoreN) {
+      ctx.fillStyle = "rgba(250, 204, 21, 0.10)";
+      ctx.fillRect(px, py, tile, edge);
+    }
+    if (shoreS) {
+      ctx.fillStyle = "rgba(250, 204, 21, 0.10)";
+      ctx.fillRect(px, py + tile - edge, tile, edge);
+    }
+    if (shoreW) {
+      ctx.fillStyle = "rgba(250, 204, 21, 0.10)";
+      ctx.fillRect(px, py, edge, tile);
+    }
+    if (shoreE) {
+      ctx.fillStyle = "rgba(250, 204, 21, 0.10)";
+      ctx.fillRect(px + tile - edge, py, edge, tile);
+    }
+
+    // subtle depth edge
+    ctx.fillStyle = "rgba(3, 105, 161, 0.14)";
     ctx.fillRect(px, py + tile - 3, tile, 3);
 
+    // waves (cheap + deterministic)
+    ctx.save();
+    ctx.strokeStyle = "rgba(56, 189, 248, 0.14)";
+    ctx.lineWidth = 1;
+    const phase = r * 6.0;
+    for (let k = 0; k < 2; k++) {
+      const y0 = py + tile * (0.28 + k * 0.33) + (r - 0.5) * 2;
+      ctx.beginPath();
+      for (let t = 0; t <= tile; t += 6) {
+        const yy = y0 + Math.sin((t / tile) * Math.PI * 2 + phase + k) * 1.4;
+        if (t === 0) ctx.moveTo(px + t, yy);
+        else ctx.lineTo(px + t, yy);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+
     if (tv === TERRAIN.FishSpot) {
-      ctx.fillStyle = "rgba(253, 224, 71, 0.95)";
-      ctx.fillRect(px + tile * 0.7, py + tile * 0.25, 4, 4);
+      // ripples + sparkle
+      ctx.save();
+      ctx.strokeStyle = "rgba(253, 224, 71, 0.55)";
+      ctx.lineWidth = 1;
+      const cx = px + tile * (0.60 + (r - 0.5) * 0.15);
+      const cy = py + tile * (0.45 + (hash2(x + 9, y + 7) - 0.5) * 0.15);
+      ctx.beginPath();
+      ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(cx + 3, cy + 2, 2.5, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.fillStyle = "rgba(253, 224, 71, 0.9)";
+      ctx.fillRect(px + tile * 0.72, py + tile * 0.22, 3, 3);
+      ctx.restore();
     }
     return;
   }
 
+  // Forest
   if (tv === TERRAIN.Forest) {
-    ctx.fillStyle = "rgba(22, 163, 74, 0.12)";
+    ctx.fillStyle = `rgba(22, 163, 74, ${0.09 + 0.06 * r})`;
     ctx.fillRect(px, py, tile, tile);
 
-    // tiny tree blobs
-    ctx.fillStyle = "rgba(34, 197, 94, 0.25)";
-    ctx.fillRect(px + 6, py + 8, 4, 4);
-    ctx.fillRect(px + tile - 12, py + 6, 3, 3);
-    ctx.fillRect(px + tile - 10, py + tile - 12, 4, 4);
+    // clumps (deterministic per tile)
+    const trees = 4 + Math.floor(hash2(x + 13, y + 17) * 3);
+    for (let k = 0; k < trees; k++) {
+      const rr = hash2(x * 7 + k * 31, y * 11 + k * 19);
+      const ox = px + 6 + rr * (tile - 12);
+      const oy = py + 6 + hash2(x * 5 + k * 23, y * 3 + k * 29) * (tile - 14);
+      const rad = 3 + Math.floor(hash2(x + 101 + k, y + 203 + k) * 3);
+
+      // canopy
+      ctx.fillStyle = "rgba(34, 197, 94, 0.22)";
+      ctx.beginPath();
+      ctx.arc(ox, oy, rad + 1, 0, Math.PI * 2);
+      ctx.fill();
+
+      // shadow blob
+      ctx.fillStyle = "rgba(0,0,0,0.10)";
+      ctx.fillRect(ox - 2, oy + rad, 4, 2);
+    }
+
+    // wet edge near water (helps shore readability)
+    if (nearWaterN) {
+      ctx.fillStyle = "rgba(2, 132, 199, 0.06)";
+      ctx.fillRect(px, py, tile, edge);
+    }
+    if (nearWaterS) {
+      ctx.fillStyle = "rgba(2, 132, 199, 0.06)";
+      ctx.fillRect(px, py + tile - edge, tile, edge);
+    }
+    if (nearWaterW) {
+      ctx.fillStyle = "rgba(2, 132, 199, 0.06)";
+      ctx.fillRect(px, py, edge, tile);
+    }
+    if (nearWaterE) {
+      ctx.fillStyle = "rgba(2, 132, 199, 0.06)";
+      ctx.fillRect(px + tile - edge, py, edge, tile);
+    }
     return;
   }
 
+  // Mountain
   if (tv === TERRAIN.Mountain) {
-    ctx.fillStyle = "rgba(148, 163, 184, 0.14)";
+    ctx.fillStyle = `rgba(148, 163, 184, ${0.10 + 0.06 * r})`;
     ctx.fillRect(px, py, tile, tile);
 
+    // main peak
     ctx.fillStyle = "rgba(148, 163, 184, 0.22)";
     ctx.beginPath();
-    ctx.moveTo(px + 6, py + tile - 6);
-    ctx.lineTo(px + tile / 2, py + 8);
-    ctx.lineTo(px + tile - 6, py + tile - 6);
+    ctx.moveTo(px + 5, py + tile - 5);
+    ctx.lineTo(px + tile * (0.52 + (r - 0.5) * 0.08), py + 8);
+    ctx.lineTo(px + tile - 5, py + tile - 5);
     ctx.closePath();
     ctx.fill();
+
+    // ridge shading
+    ctx.strokeStyle = "rgba(30, 41, 59, 0.16)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(px + 8, py + tile - 9);
+    ctx.lineTo(px + tile * 0.45, py + tile * 0.38);
+    ctx.lineTo(px + tile - 8, py + tile - 9);
+    ctx.stroke();
+
+    // wet edge near water
+    if (nearWaterN || nearWaterE || nearWaterS || nearWaterW) {
+      ctx.fillStyle = "rgba(2, 132, 199, 0.05)";
+      if (nearWaterN) ctx.fillRect(px, py, tile, edge);
+      if (nearWaterS) ctx.fillRect(px, py + tile - edge, tile, edge);
+      if (nearWaterW) ctx.fillRect(px, py, edge, tile);
+      if (nearWaterE) ctx.fillRect(px + tile - edge, py, edge, tile);
+    }
     return;
   }
 
-  // plain: keep dark base (already filled globally)
+  // Plain: subtle grass noise + wet edge near water
+  if (tv === TERRAIN.Plain) {
+    // micro noise
+    if (r < 0.35) {
+      ctx.fillStyle = "rgba(34, 197, 94, 0.04)";
+      ctx.fillRect(px + 4 + Math.floor(r * 7), py + 6 + Math.floor(hash2(x + 2, y + 3) * 9), 2, 2);
+    }
+    if (nearWaterN || nearWaterE || nearWaterS || nearWaterW) {
+      ctx.fillStyle = "rgba(250, 204, 21, 0.05)";
+      if (nearWaterN) ctx.fillRect(px, py, tile, edge);
+      if (nearWaterS) ctx.fillRect(px, py + tile - edge, tile, edge);
+      if (nearWaterW) ctx.fillRect(px, py, edge, tile);
+      if (nearWaterE) ctx.fillRect(px + tile - edge, py, edge, tile);
+    }
+  }
 }
 
 function drawRoad(ctx: CanvasRenderingContext2D, x: number, y: number, tile: number, grid: Grid) {
@@ -589,7 +750,7 @@ export function render(
     for (let x = xStart; x < xEnd; x++) {
       const i = y * grid.cols + x;
       const tv = terrain[i] ?? TERRAIN.Plain;
-      drawTerrainTile(ctx, x, y, world.tile, tv);
+      drawTerrainTile(ctx, x, y, world.tile, tv, terrain, world.cols, world.rows);
     }
   }
 
