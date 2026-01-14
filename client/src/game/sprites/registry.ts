@@ -47,6 +47,11 @@ export const SPRITE_DEFS: Record<SpriteId, SpriteDef> = {
   house_l1: { files: ["house_l1.png"], pivotX: 16, pivotY: 47 },
   house_l2: { files: ["house_l2.png"], pivotX: 16, pivotY: 47 },
   house_l3: { files: ["house_l3.png"], pivotX: 16, pivotY: 47 },
+  house_l4: { files: ["house_l4.png"], pivotX: 16, pivotY: 47 },
+  house_l5: { files: ["house_l5.png"], pivotX: 16, pivotY: 47 },
+  house_l6: { files: ["house_l6.png"], pivotX: 16, pivotY: 47 },
+  house_l7: { files: ["house_l7.png"], pivotX: 16, pivotY: 47 },
+  house_l8: { files: ["house_l8.png"], pivotX: 16, pivotY: 47 },
 
   well: { files: ["well.png"], pivotX: 16, pivotY: 47 },
   market: { files: ["market.png"], pivotX: 16, pivotY: 47 },
