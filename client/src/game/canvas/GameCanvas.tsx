@@ -88,8 +88,8 @@ const FARM_FISH_RECIPE_FAST: ProductionRecipe = { durationMs: FARM_FISH_TIME_FAS
 const FARM_FISH_RECIPE_SLOW: ProductionRecipe = { durationMs: FARM_FISH_TIME_SLOW_MS, outputs: { fish: 2 } };
 
 // Cow farm: milk + beef in parallel
-const FARM_COW_MILK_TIME_MS = 600_000; // 10 min
-const FARM_COW_BEEF_TIME_MS = 2_400_000; // 40 min
+const FARM_COW_MILK_TIME_MS = 300_000;
+const FARM_COW_BEEF_TIME_MS = 450_000;
 const FARM_COW_MILK_RECIPE: ProductionRecipe = { durationMs: FARM_COW_MILK_TIME_MS, outputs: { milk: 1 } };
 const FARM_COW_BEEF_RECIPE: ProductionRecipe = { durationMs: FARM_COW_BEEF_TIME_MS, outputs: { beef: 1 } };
 

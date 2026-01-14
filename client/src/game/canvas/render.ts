@@ -132,7 +132,9 @@ function drawTerrainTile(
   tv: number,
   terrain: Uint8Array,
   cols: number,
-  rows: number
+  rows: number,
+  now: number,
+  sprites: SpriteSet | null
 ) {
   const px = x * tile;
   const py = y * tile;
@@ -774,7 +776,7 @@ export function render(
     for (let x = xStart; x < xEnd; x++) {
       const i = y * grid.cols + x;
       const tv = terrain[i] ?? TERRAIN.Plain;
-      drawTerrainTile(ctx, x, y, world.tile, tv, terrain, world.cols, world.rows);
+      drawTerrainTile(ctx, x, y, world.tile, tv, terrain, world.cols, world.rows, now, sprites);
     }
   }
 
@@ -816,19 +818,33 @@ export function render(
         if (sp) drawSpriteAtTileBottomCenter(ctx, sp, x, y, world.tile, now);
         else drawLumbermill(ctx, x, y, world.tile);
       } else if (isClayQuarry(grid, x, y)) {
-        drawClayQuarry(ctx, x, y, world.tile);
+        const sp = sprites?.clay_quarry;
+        if (sp) drawSpriteAtTileBottomCenter(ctx, sp, x, y, world.tile, now);
+        else drawClayQuarry(ctx, x, y, world.tile);
       } else if (isPottery(grid, x, y)) {
-        drawPottery(ctx, x, y, world.tile);
+        const sp = sprites?.pottery;
+        if (sp) drawSpriteAtTileBottomCenter(ctx, sp, x, y, world.tile, now);
+        else drawPottery(ctx, x, y, world.tile);
       } else if (isFurnitureFactory(grid, x, y)) {
-        drawFurnitureFactory(ctx, x, y, world.tile);
+        const sp = sprites?.furniture_factory;
+        if (sp) drawSpriteAtTileBottomCenter(ctx, sp, x, y, world.tile, now);
+        else drawFurnitureFactory(ctx, x, y, world.tile);
       } else if (isFarmChicken(grid, x, y)) {
-        drawFarmChicken(ctx, x, y, world.tile);
+        const sp = sprites?.farm_chicken;
+        if (sp) drawSpriteAtTileBottomCenter(ctx, sp, x, y, world.tile, now);
+        else drawFarmChicken(ctx, x, y, world.tile);
       } else if (isFarmPig(grid, x, y)) {
-        drawFarmPig(ctx, x, y, world.tile);
+        const sp = sprites?.farm_pig;
+        if (sp) drawSpriteAtTileBottomCenter(ctx, sp, x, y, world.tile, now);
+        else drawFarmPig(ctx, x, y, world.tile);
       } else if (isFarmFish(grid, x, y)) {
-        drawFarmFish(ctx, x, y, world.tile);
+        const sp = sprites?.farm_fish;
+        if (sp) drawSpriteAtTileBottomCenter(ctx, sp, x, y, world.tile, now);
+        else drawFarmFish(ctx, x, y, world.tile);
       } else if (isFarmCow(grid, x, y)) {
-        drawFarmCow(ctx, x, y, world.tile);
+        const sp = sprites?.farm_cow;
+        if (sp) drawSpriteAtTileBottomCenter(ctx, sp, x, y, world.tile, now);
+        else drawFarmCow(ctx, x, y, world.tile);
       } else if (isHouse(grid, x, y)) {
         const i = y * grid.cols + x;
         const level = houseLevels[i] || 1;

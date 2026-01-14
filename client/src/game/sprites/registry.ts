@@ -54,6 +54,15 @@ export const SPRITE_DEFS: Record<SpriteId, SpriteDef> = {
   warehouse: { files: ["warehouse.png"], pivotX: 16, pivotY: 47 },
   lumbermill: { files: ["lumbermill.png"], pivotX: 16, pivotY: 47 },
 
+  // Production buildings / farms (optional sprites; will fallback to procedural if missing).
+  clay_quarry: { files: ["clay_quarry.png"], pivotX: 16, pivotY: 47 },
+  pottery: { files: ["pottery.png"], pivotX: 16, pivotY: 47 },
+  furniture_factory: { files: ["furniture_factory.png"], pivotX: 16, pivotY: 47 },
+  farm_chicken: { files: ["farm_chicken.png"], pivotX: 16, pivotY: 47 },
+  farm_pig: { files: ["farm_pig.png"], pivotX: 16, pivotY: 47 },
+  farm_fish: { files: ["farm_fish.png"], pivotX: 16, pivotY: 47 },
+  farm_cow: { files: ["farm_cow.png"], pivotX: 16, pivotY: 47 },
+
   // Walkers: 2-frame simple walk cycle (files exist in repo).
   walker_water: { files: ["walker_water_0.png", "walker_water_1.png"], frameMs: 160, pivotX: 16, pivotY: 28 },
   walker_food: { files: ["walker_food_0.png", "walker_food_1.png"], frameMs: 160, pivotX: 16, pivotY: 28 },

@@ -27,6 +27,13 @@ export type SpriteId =
   | "market"
   | "warehouse"
   | "lumbermill"
+  | "clay_quarry"
+  | "pottery"
+  | "furniture_factory"
+  | "farm_chicken"
+  | "farm_pig"
+  | "farm_fish"
+  | "farm_cow"
   | "walker_water"
   | "walker_food";
 
