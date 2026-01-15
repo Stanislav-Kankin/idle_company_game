@@ -465,6 +465,12 @@ export default function App() {
             {t("served")}: {t("water")} <b>{hoverHouse.waterServed ? t("yes") : t("no")}</b> • {t("food")}{" "}
             <b>{hoverHouse.foodServed ? t("yes") : t("no")}</b>
           </div>
+          {hoverHouse.riskFireS !== undefined ? (
+            <div style={{ opacity: 0.92, marginTop: 6, fontSize: 13 }}>
+              🔥 {fmtMmSs(hoverHouse.riskFireS)} • 🧱 {fmtMmSs(hoverHouse.riskCollapseS)} • 🕵️ {fmtMmSs(hoverHouse.riskCrimeS)} • 🦠{" "}
+              {fmtMmSs(hoverHouse.riskDiseaseS)}
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -884,6 +890,12 @@ export default function App() {
             {t("served")}: {t("water")} <b>{selectedHouse.waterServed ? t("yes") : t("no")}</b> • {t("food")}{" "}
             <b>{selectedHouse.foodServed ? t("yes") : t("no")}</b>
           </div>
+          {selectedHouse.riskFireS !== undefined ? (
+            <div style={{ opacity: 0.94, marginTop: 8, fontSize: 14 }}>
+              🔥 {fmtMmSs(selectedHouse.riskFireS)} • 🧱 {fmtMmSs(selectedHouse.riskCollapseS)} • 🕵️ {fmtMmSs(selectedHouse.riskCrimeS)} • 🦠{" "}
+              {fmtMmSs(selectedHouse.riskDiseaseS)}
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -1174,6 +1186,15 @@ function ToolBtn(props: { active: boolean; icon: string; title: string; cost: nu
       <span style={{ opacity: 0.9, fontWeight: 900 }}>{`💰 ${props.cost}`}</span>
     </button>
   );
+}
+
+function fmtMmSs(sec: number | undefined): string {
+  const s = sec ?? -1;
+  if (s < 0 || !Number.isFinite(s)) return "--:--";
+  const clamped = Math.max(0, Math.floor(s));
+  const m = Math.floor(clamped / 60);
+  const ss = clamped % 60;
+  return `${m}:${String(ss).padStart(2, "0")}`;
 }
 
 function btnStyle(active: boolean): CSSProperties {

@@ -72,6 +72,12 @@ const WORKERS_FARM_PIG = 12;
 const WORKERS_FARM_FISH = 8;
 const WORKERS_FARM_COW = 14;
 
+// Risks (Iteration D-logic) — base countdown until incident if not prevented
+const RISK_FIRE_MS = 300_000; // 5 min
+const RISK_COLLAPSE_MS = 480_000; // 8 min
+const RISK_CRIME_MS = 600_000; // 10 min
+const RISK_DISEASE_MS = 420_000; // 7 min
+
 // Farms (Iteration C3.4)
 // Chicken farm: 1 meat per 5 minutes
 const FARM_CHICKEN_TIME_MS = 300_000;
@@ -154,6 +160,12 @@ export function GameCanvas(props: {
   const waterExpiryRef = useRef<Float64Array>(new Float64Array(world.cols * world.rows));
   const foodExpiryRef = useRef<Float64Array>(new Float64Array(world.cols * world.rows));
   const waterPotentialRef = useRef<Uint8Array>(new Uint8Array(world.cols * world.rows));
+
+  // Risks (Iteration D-logic): per-house countdown deadlines (ms, performance.now)
+  const riskFireDueRef = useRef<Float64Array>(new Float64Array(world.cols * world.rows));
+  const riskCollapseDueRef = useRef<Float64Array>(new Float64Array(world.cols * world.rows));
+  const riskCrimeDueRef = useRef<Float64Array>(new Float64Array(world.cols * world.rows));
+  const riskDiseaseDueRef = useRef<Float64Array>(new Float64Array(world.cols * world.rows));
 
   // NOTE: sim/render expect Uint8Array for house levels
   const houseLevelsRef = useRef<Uint8Array>(new Uint8Array(world.cols * world.rows));
@@ -292,7 +304,13 @@ export function GameCanvas(props: {
 
     const population = computeHousePopulation(level, hasRoadAdj, hasWaterPotential, foodServed);
 
-    return { x, y, level, population, hasRoadAdj, hasWaterPotential, waterServed, foodServed };
+    const toSec = (due: number) => (due > 0 ? Math.max(0, Math.ceil((due - now) / 1000)) : -1);
+    const riskFireS = toSec(riskFireDueRef.current[i]);
+    const riskCollapseS = toSec(riskCollapseDueRef.current[i]);
+    const riskCrimeS = toSec(riskCrimeDueRef.current[i]);
+    const riskDiseaseS = toSec(riskDiseaseDueRef.current[i]);
+
+    return { x, y, level, population, hasRoadAdj, hasWaterPotential, waterServed, foodServed, riskFireS, riskCollapseS, riskCrimeS, riskDiseaseS };
   }
 
   function emptyMarketSlots(): MarketSlots {
@@ -1004,6 +1022,12 @@ function hasAdjacentWaterOrFishSpot(x: number, y: number): boolean {
           houseLevelsRef.current[i] = 0;
           houseSatisfiedSinceRef.current[i] = 0;
 
+          // reset risks
+          riskFireDueRef.current[i] = 0;
+          riskCollapseDueRef.current[i] = 0;
+          riskCrimeDueRef.current[i] = 0;
+          riskDiseaseDueRef.current[i] = 0;
+
           if (current === "well") {
             waterPotentialRef.current = computeWellWaterPotential(gridRef.current, WELL_RADIUS);
           }
@@ -1045,6 +1069,13 @@ function hasAdjacentWaterOrFishSpot(x: number, y: number): boolean {
           const i = tile.y * gridRef.current.cols + tile.x;
           houseLevelsRef.current[i] = 1;
           houseSatisfiedSinceRef.current[i] = 0;
+
+          // init risks countdown (ms deadlines)
+          const now = performance.now();
+          riskFireDueRef.current[i] = now + RISK_FIRE_MS;
+          riskCollapseDueRef.current[i] = now + RISK_COLLAPSE_MS;
+          riskCrimeDueRef.current[i] = now + RISK_CRIME_MS;
+          riskDiseaseDueRef.current[i] = now + RISK_DISEASE_MS;
 
           return;
         }

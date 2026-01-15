@@ -217,6 +217,12 @@ export type HouseInfo = {
 
   waterServed: boolean; // time-limited (walker)
   foodServed: boolean; // time-limited (walker)
+
+  // Risks (countdown seconds; -1 means unknown/uninitialized)
+  riskFireS?: number;
+  riskCollapseS?: number;
+  riskCrimeS?: number;
+  riskDiseaseS?: number;
 };
 
 export type CityStats = {
